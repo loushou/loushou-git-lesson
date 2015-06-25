@@ -788,7 +788,7 @@ var QS = QS || {};
 				ele: t.utils.hud.path( 'M6,0L9,0L9,6L15,6L15,9L9,9L9,15L6,15L6,9L0,9L0,6L6,6z' ),
 				only_click: true,
 				name: 'zoom-in',
-				title: 'Zoom-In',
+				title: __( 'Zoom-In' ),
 				click: function() { t.canvas.zoom.in(); t.toolbar.activate( 'pointer' ); }
 			} );
 
@@ -796,7 +796,7 @@ var QS = QS || {};
 				ele: t.utils.hud.path( 'M0,0L15,0L15,4L0,4z' ),
 				only_click: true,
 				name: 'zoom-out',
-				title: 'Zoom-Out',
+				title: __( 'Zoom-Out' ),
 				click: function() { t.canvas.zoom.out(); t.toolbar.activate( 'pointer' ); }
 			} );
 
@@ -958,9 +958,13 @@ var QS = QS || {};
 					}
 					var sxy = { x:dist.x / dxy.dx, y:dist.y / dxy.dy }; // new scaling based on the distance moved
 					me.ui.canvas.Selection.forEach( function( item ) { // perform the scaling for each selected element
-						var orig = ( item.data( 'orig-matrix' ) || new S.Matrix ).clone(), oi = orig.invert(), c = me.ui.canvas.zoom.for_pan( { x:dxy.acx, y:dxy.acy } );
-						orig.scale( sxy.x, sxy.y, oi.x( c.x, c.y ), oi.y( c.x, c.y ) );
-						item.transform( orig );
+						var orig = ( item.data( 'orig-matrix' ) || new S.Matrix ).clone(), oi = orig.invert(), c = me.ui.canvas.zoom.for_pan( { x:dxy.acx, y:dxy.acy } ), kind = item.attr( 'kind' );
+						if ( QS.cbs.has( 'qsot-scale-' + kind ) ) {
+							QS.cbs.trigger( 'qsot-scale-' + kind, [ item, orig, sxy, oi, c, me.ui, { s:s, r:r, dx:dx, dy:dy, dxy:dxy, dist:dist } ] );
+						} else {
+							orig.scale( sxy.x, sxy.y, oi.x( c.x, c.y ), oi.y( c.x, c.y ) );
+							item.transform( orig );
+						}
 					} );
 					me.adjust_bounds(); // adjust the bounding box for our tools, as you scale
 				}
@@ -1136,7 +1140,7 @@ var QS = QS || {};
 				ele: t.toolbar.hud.path( 'M0,0L6,0L4,2L8,6L11,6L15,2L13,0L19,0L19,6L17,4L13,8L13,11L17,15L19,13L19,19L13,19L15,17L11,13L8,13L4,17L6,19L0,19L0,13L2,15L6,11L6,8L2,4L0,6z' ),
 				only_click: true,
 				name: 'fullscreen',
-				title: 'Distraction Free',
+				title: __( 'Distraction Free' ),
 				click: function() { t.canvas.DF.toggle(); }
 			} );
 		} )( -1 );
@@ -1209,6 +1213,7 @@ var QS = QS || {};
 			} else if ( suppress && cnt ) {
 				this.idx = this.fifo.length - 1;
 			}
+			console.log( 'UNDOER', this );
 
 			return this;
 		}
@@ -1293,7 +1298,7 @@ var QS = QS || {};
 				ele: t.toolbar.hud.path( 'M0,7L7,0L7,14z' ),
 				only_click: true,
 				name: 'undo',
-				title: 'Undo',
+				title: __( 'Undo' ),
 				click: function() { t.canvas.U.undo( 1 ); }
 			} );
 
@@ -1301,7 +1306,7 @@ var QS = QS || {};
 				ele: t.toolbar.hud.path( 'M20,7L13,0L13,14z' ),
 				only_click: true,
 				name: 'redo',
-				title: 'Redo',
+				title: __( 'Redo' ),
 				click: function() { t.canvas.U.redo( 1 ); }
 			} );
 		} )( -5 );
@@ -1441,7 +1446,7 @@ var QS = QS || {};
 						last_ku = my_ku;
 						setTimeout( function() {
 							if ( last_ku != my_ku ) return;
-							qt.isF( d.onchange ) && d.onchange( $( el ), a, f, d, e );
+							qt.isF( d.onchange ) && d.onchange( $( this ), a, f, d, e );
 						}, 350 );
 					} );
 				f.html.appendTo( item.advanced ? me.e.aBoxIn : me.e.sBoxIn );
@@ -1454,6 +1459,9 @@ var QS = QS || {};
 			for ( i in this.fields ) if ( this.fields[ has ]( i ) ) {
 				this.fields[ i ].field.off( 'change.qs-field keyup.qs-field' );
 				this.fields[ i ].html.appendTo( this.e.holder );
+				if ( qt.is( this.fields[ i ]._cp_shell ) ) {
+					this.fields[ i ]._cp_shell.trigger( 'close' );
+				}
 			};
 			return this;
 		};
@@ -1555,14 +1563,15 @@ var QS = QS || {};
 
 							t.field.on( 'updated.cp', function( ev, color ) {
 								var color = color || Color( t.field.val() );
+								console.log( 'color', color );
 								t.field.val( color.toString() ).css( {
 									color: color.v() > 50 ? '#000' : '#fff',
 									backgroundColor: color.toString()
-								} ).change();
-							} ).trigger( 'updated' );
+								} ).trigger( 'change' );
+							} ).on( 'keyup.cp', function() { $( this ).trigger( 'updated', [ Color( $( this ).val() ) ] ); } ).trigger( 'updated' );
 
 							t._cp_shell = $( '<div class="sb-cp-shell"></div>' ).appendTo( 'body' ).iris( {
-								color: item.value ? ( '#000' == item.value || '#000000' == item.value ? { h:0, s:100, v: 0 } : item.value ) : { h:0, s:100, v: 0 },
+								color: item.value ? ( ! item.multiple && ( '#000' == item.value || '#000000' == item.value ) ? { h:0, s:100, v: 0 } : item.value ) : { h:0, s:100, v: 0 },
 								width: 300,
 								mode: 'hsv',
 								change: function( ev, ui ) {
@@ -1682,7 +1691,7 @@ var QS = QS || {};
 													msg_cont.remove();
 													with_line( line );
 												} else {
-													msg_cont.html( msg + '<br/><u><em>the line must be at least 5px long. <b>(' + d + ')</b></em></u>' );
+													msg_cont.html( msg + '<br/><u><em>' + __( 'the line must be at least 5px long.' ) + ' <b>(' + d + ')</b></em></u>' );
 												}
 											} );
 										}
@@ -1760,13 +1769,13 @@ var QS = QS || {};
 									if ( ! aname ) return;
 
 									QS.Prompt( {
-										title: 'What to find:',
+										title: __( 'What to find:' ),
 										msg: __( 'What text would you like to find, within each name (regex without delimiters is accepted)?' ),
 										with_result: function( find ) {
 											if ( null === find ) return;
 
 											QS.Prompt( {
-												title: 'Replace it with what?',
+												title: __( 'Replace it with what?' ),
 												msg: __( 'What text would you like to find, within each name (regex without delimiters is accepted)?' ),
 												with_result: function( replace ) {
 													if ( null === replace ) return;
@@ -1896,56 +1905,56 @@ var QS = QS || {};
 					},
 					fields = {
 						_all: {
-							zone_id: { type:'none', name:'True ID', attr:[ 'zone-id' ], hidden:true },
-							id: { type:'text', name:'Unique ID', attr:[ 'id' ], single:true, advanced:true, title:'Think of this as the "slug" to identify this zone uniquely from the others, like a post would have.'},
-							zone: { type:'namer', name:'Name', attr:[ 'zone' ], title:'The proper name of this zone, displayed in most locations that this zone needs to be identified, like on tickets, carts, or ticket selection UIs.' },
-							capacity: { type:'number', name:'Capacity', attr:[ 'capacity' ], title:'The maximum number of tickets that can be sold for this zone, on a given event.' },
-							fill: { type:'colorpicker', name:'Fill Color', attr:[ 'fill' ], filter:function( v ) { return Color( v ).toString(); }, title:'What color should the inside of the shape for this zone be?' },
-							hidden: { type:'truefalse', name:'Hidden on Frontend', attr:[ 'hidden' ], advanced:true, title:'If yes, then this element does not get displayed to the end user.' },
-							locked: { type:'truefalse', name:'Locked in Place', attr:[ 'locked' ], advanced:true, title:'If yes, then attempts to drag this element will not work.' },
-							'fill-opacity': { type:'number', min:0, max:1, step:0.01, name:'Fill Transparency', attr:[ 'fill-opacity' ],
-									filter:function( v ) { return qt.pl( v, 2 ); }, advanced:true, title:'Transparency of the inside of the zone.' },
-							'unavail-fill': { type:'colorpicker', name:'Unavailable Color', attr:[ 'unavail-fill' ], advanced:true,
-									filter:function( v ) { return Color( v ).toString(); }, title:'What color should the inside of the zone be when it has reached capacity?' },
-							'unavail-fill-opacity': { type:'number', min:0, max:1, step:0.1, name:'Unavailable Transparency', attr:[ 'unavail-fill-opacity' ], advanced:true, title:'Transparency of the inside of the zone, when at capacity' },
-							angle: { type:'none', name:'Angle', attr:[], func:function( args, i, m ) { return m.rotate; }, hidden:true }
+							zone_id: { type:'none', name:__( 'True ID' ), attr:[ 'zone-id' ], hidden:true },
+							id: { type:'text', name:__( 'Unique ID' ), attr:[ 'id' ], single:true, advanced:true, title:__( 'Think of this as the "slug" to identify this zone uniquely from the others, like a post would have.' )},
+							zone: { type:'namer', name:__( 'Name' ), attr:[ 'zone' ], title:__( 'The proper name of this zone, displayed in most locations that this zone needs to be identified, like on tickets, carts, or ticket selection UIs.' ) },
+							capacity: { type:'number', name:__( 'Capacity' ), attr:[ 'capacity' ], title:__( 'The maximum number of tickets that can be sold for this zone, on a given event.' ) },
+							fill: { type:'colorpicker', name:__( 'Fill Color' ), attr:[ 'fill' ], filter:function( v ) { return Color( v ).toString(); }, title:__( 'What color should the inside of the shape for this zone be?' ) },
+							hidden: { type:'truefalse', name:__( 'Hidden on Frontend' ), attr:[ 'hidden' ], advanced:true, title:__( 'If yes, then this element does not get displayed to the end user.' ) },
+							locked: { type:'truefalse', name:__( 'Locked in Place' ), attr:[ 'locked' ], advanced:true, title:__( 'If yes, then attempts to drag this element will not work.' ) },
+							'fill-opacity': { type:'number', min:0, max:1, step:0.01, name:__( 'Fill Transparency' ), attr:[ 'fill-opacity' ],
+									filter:function( v ) { return qt.pl( v, 2 ); }, advanced:true, title:__( 'Transparency of the inside of the zone.' ) },
+							'unavail-fill': { type:'colorpicker', name:__( 'Unavailable Color' ), attr:[ 'unavail-fill' ], advanced:true,
+									filter:function( v ) { return Color( v ).toString(); }, title:__( 'What color should the inside of the zone be when it has reached capacity?' ) },
+							'unavail-fill-opacity': { type:'number', min:0, max:1, step:0.1, name:__( 'Unavailable Transparency' ), attr:[ 'unavail-fill-opacity' ], advanced:true, title:__( 'Transparency of the inside of the zone, when at capacity' ) },
+							angle: { type:'none', name:__( 'Angle' ), attr:[], func:function( args, i, m ) { return m.rotate; }, hidden:true }
 						},
 						_zz: {
-							zoom_level: { type:'number', name:'Show Level', attr:[ 'zoom-lvl' ], filter:function( v ) { return qt.pl( v, 3 ); }, title:'Show this zoom zone when zoom level is less than or equal to this number.' }
+							zoom_level: { type:'number', name:__( 'Show Level' ), attr:[ 'zoom-lvl' ], filter:function( v ) { return qt.pl( v, 3 ); }, title:__( 'Show this zoom zone when zoom level is less than or equal to this number.' ) }
 						},
 						image: {
-							'image-id': { type:'none', name:'Image ID', attr:[ 'image-id' ], hidden:true },
-							src: { type:'none', name:'Source', attr:[ 'src' ], hidden:true },
-							width: { type:'none', name:'Image Width', attr:[ 'width' ], hidden:true },
-							height: { type:'none', name:'Image Height', attr:[ 'height' ], hidden:true },
-							x: { type:'none', name:'Image Offset X', attr:[ 'x' ], hidden:true },
-							y: { type:'none', name:'Image Offset Y', attr:[ 'y' ], hidden:true },
-							bg: { type:'truefalse', name:'Backdrop Image', attr:[ 'bg-img' ], title:'If yes, then the displayed canvas on the frontend will use this image as the background image of the interface' }
+							'image-id': { type:'none', name:__( 'Image ID' ), attr:[ 'image-id' ], hidden:true },
+							src: { type:'none', name:__( 'Source' ), attr:[ 'src' ], hidden:true },
+							width: { type:'none', name:__( 'Image Width' ), attr:[ 'width' ], hidden:true },
+							height: { type:'none', name:__( 'Image Height' ), attr:[ 'height' ], hidden:true },
+							x: { type:'none', name:__( 'Image Offset X' ), attr:[ 'x' ], hidden:true },
+							y: { type:'none', name:__( 'Image Offset Y' ), attr:[ 'y' ], hidden:true },
+							bg: { type:'truefalse', name:__( 'Backdrop Image' ), attr:[ 'bg-img' ], title:__( 'If yes, then the displayed canvas on the frontend will use this image as the background image of the interface' ) }
 						},
 						circle: {
-							cx: { type:'number', name:'X Center', attr:[ 'cx', 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
-							cy: { type:'number', name:'Y Center', attr:[ 'cy', 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
-							r: { type:'number', min:0, max:360, step:1, name:'Radius', attr:[ 'r' ], update_triggers:update_on, advanced:true }
+							cx: { type:'number', name:__( 'X Center' ), attr:[ 'cx', 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
+							cy: { type:'number', name:__( 'Y Center' ), attr:[ 'cy', 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
+							r: { type:'number', min:0, max:360, step:1, name:__( 'Radius' ), attr:[ 'r' ], update_triggers:update_on, advanced:true }
 						},
 						ellipse: {
-							cx: { type:'number', name:'X Center', attr:[ 'cx', 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
-							cy: { type:'number', name:'Y Center', attr:[ 'cy', 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
-							rx: { type:'number', min:0, max:360, step:1, name:'Radius', attr:[ 'rx' ], update_triggers:update_on, advanced:true },
-							ry: { type:'number', min:0, max:360, step:1, name:'Radius', attr:[ 'ry' ], update_triggers:update_on, advanced:true }
+							cx: { type:'number', name:__( 'X Center' ), attr:[ 'cx', 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
+							cy: { type:'number', name:__( 'Y Center' ), attr:[ 'cy', 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
+							rx: { type:'number', min:0, max:360, step:1, name:__( 'Radius X' ), attr:[ 'rx' ], update_triggers:update_on, advanced:true },
+							ry: { type:'number', min:0, max:360, step:1, name:__( 'Radius Y' ), attr:[ 'ry' ], update_triggers:update_on, advanced:true }
 						},
 						rect: {
-							'hover-fill': { type:'colorpicker', name:'Color on Hover', title:'Background color when element is hovered.', attr:[ 'hover-fill' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
-							'hover-fill-opacity': { type:'number', name:'Opacity on Hover', title:'Background opacity when element is hovered.', attr:[ 'hover-fill-opacity' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
-							zmin: { type:'number', name:'Show Max Zoom Level', title:'Only show when the zoom is equal to or less than this value.', attr:[ 'min-zoom' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
-							x: { type:'number', name:'X Upper Left', attr:[ 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
-							y: { type:'number', name:'Y Upper Left', attr:[ 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
-							width: { type:'number', name:'Width', attr:[ 'width' ], update_triggers:update_on, advanced:true },
-							height: { type:'number', name:'Height', attr:[ 'height' ], update_triggers:update_on, advanced:true }
+							'hover-fill': { type:'colorpicker', name:__( 'Color on Hover' ), title:__( 'Background color when element is hovered.' ), attr:[ 'hover-fill' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
+							'hover-fill-opacity': { type:'number', name:__( 'Opacity on Hover' ), title:__( 'Background opacity when element is hovered.' ), attr:[ 'hover-fill-opacity' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
+							zmin: { type:'number', name:__( 'Show Max Zoom Level' ), title:__( 'Only show when the zoom is equal to or less than this value.' ), attr:[ 'min-zoom' ], update_triggers:update_on, only_if:only_zoom_zones, advanced:true },
+							x: { type:'number', name:__( 'X Upper Left' ), attr:[ 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
+							y: { type:'number', name:__( 'Y Upper Left' ), attr:[ 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
+							width: { type:'number', name:__( 'Width' ), attr:[ 'width' ], update_triggers:update_on, advanced:true },
+							height: { type:'number', name:__( 'Height' ), attr:[ 'height' ], update_triggers:update_on, advanced:true }
 						},
 						polygon: {
-							x: { type:'number', name:'X Upper Left', attr:[ 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
-							y: { type:'number', name:'Y Upper Left', attr:[ 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
-							points: { type:'text', name:'Path Points', title:'space between points and comma between x and xy: (ei: 0,0 10,0 10,10 0,10)', attr:[ 'points' ], advanced:true, update_triggers:update_on, advanced:true }
+							x: { type:'number', name:__( 'X Upper Left' ), attr:[ 'x' ], matrix:'dx', update_triggers:update_on, advanced:true },
+							y: { type:'number', name:__( 'Y Upper Left' ), attr:[ 'y' ], matrix:'dy', update_triggers:update_on, advanced:true },
+							points: { type:'text', name:__( 'Path Points' ), title:__( 'space between points and comma between x and xy: (ei: 0,0 10,0 10,10 0,10)' ), attr:[ 'points' ], advanced:true, update_triggers:update_on, advanced:true }
 						}
 					};
 
@@ -2048,10 +2057,13 @@ var QS = QS || {};
 
 				for ( i = 0; i < sel_cnt; i++ ) {
 					( function( tag, kind, atts, el ) {
-						var uniqs = 0, a;
+						var uniqs = 0, m = ( el.matrix || new S.Matrix ).split(), a;
 
 						for ( a in fields._all ) if ( fields._all[ has ]( a ) ) {
-							val = atts[ a ] || '';
+							val = qt.is( atts[ a ] ) ? atts[ a ] : '';
+							val = ! val && qt.isO( atts['style'] ) && qt.is( atts['style'][ a ] ) ? atts['style'][ a ] : val;
+							val = val || '';
+							val = normalize( val, el, m, a );
 							if ( qt.isF( fields._all[ a ].filter ) ) val = fields._all[ a ].filter( val );
 							if ( qt.is( shared[ a ].values[ val ] ) ) {
 								shared[ a ].values[ val ]++;
@@ -2072,7 +2084,11 @@ var QS = QS || {};
 							val = '';
 							for ( k = 0; k < field.attr.length; k++ ) {
 								if ( ! qt.is( atts[ field.attr[ k ] ] ) ) continue;
-								val = atts[ field.attr[ k ] ] || '';
+								var a = field.attr[ k ];
+								val = qt.is( atts[ a ] ) ? atts[ a ] : '';
+								val = ! val && qt.isO( atts['style'] ) && qt.is( atts['style'][ a ] ) ? atts['style'][ a ] : val;
+								val = val || '';
+								val = normalize( val, el, m, a );
 								if ( qt.isF( field.filter ) ) val = field.filter( val );
 								break;
 							}
@@ -2102,7 +2118,11 @@ var QS = QS || {};
 								val = '';
 								for ( k = 0; k < field.attr.length; k++ ) {
 									if ( ! qt.is( atts[ field.attr[ k ] ] ) ) continue;
-									val = atts[ field.attr[ k ] ] || '';
+									var a = field.attr[ k ];
+									val = qt.is( atts[ a ] ) ? atts[ a ] : '';
+									val = ! val && qt.isO( atts['style'] ) && qt.is( atts['style'][ a ] ) ? atts['style'][ a ] : val;
+									val = val || '';
+									val = normalize( val, el, m, a );
 									if ( qt.isF( field.filter ) ) val = field.filter( val );
 									break;
 								}
@@ -2137,53 +2157,84 @@ var QS = QS || {};
 							if ( qt.isF( $el ) ) {
 								$el( paper.Selection.items, attr, field, ev );
 							} else {
-								var all_data = { from:{}, to:{}, type:data.type }, chngd = 0, i = 0, val = 0, id, cur;
+								var all_data = { from:{}, to:{}, type:data.type, attr:attr, key:[] }, chngd = 0, i = 0, val = 0, id, cur, compare;
 
 								// special case for truefalse values
 								if ( 'truefalse' == data.type ) {
-									if ( $el.filter( ':checked' ).length ) val = $el.val();
-								// all others are straight forward
+									if ( $el.filter( ':checked' ).length ) val = qt.is( $el[0] ) && qt.is( $el[0].nodeName ) ? $el.val() : '';
+								} else if ( 'colorpicker' == data.type ) {
+									val = qt.is( $el[0] ) && qt.is( $el[0].nodeName ) ? $el.val() : '';
+									val = qt.is( val ) && '' != val ? Color( val ).toString() : '';
+								// all others are straight forward #000000
 								} else {
-									val = $el.val();
+									val = qt.is( $el[0] ) && qt.is( $el[0].nodeName ) ? $el.val() : '';
 								}
+
+								console.log( data.type.toUpperCase(), $el[0], 'val=[' + val + ']', $el[0], $el[0].nodeName, $el[0].value );
 
 								// update our 'data' for the undoer
 								for ( ; i < paper.Selection.length; i++ ) {
 									id = paper.Selection.items[ i ].node.snap;
 									cur = paper.Selection.items[ i ].attr( attr );
+									compare = val;
+									// when dealing with a color picker, convert the color, and mark this item as having special comparison logic
+									if ( 'colorpicker' == data.type ) {
+										cur = Color( qt.is( cur ) && '' != cur ? cur : '#000000' ).toString();
+										compare = ! qt.is( val ) || '' == val ? cur : val;
+									} else {
+										cur = qt.is( cur ) ? cur : '';
+									}
 									// if the data actually changed
-									if ( cur != val ) {
+									if ( cur != compare ) {
+										all_data.key.push( id );
 										//paper.Selection.items[ i ].attr( attr, val + '' );
 										if ( ! qt.is( all_data.from[ id ] ) ) all_data.from[ id ] = {};
 										if ( ! qt.is( all_data.to[ id ] ) ) all_data.to[ id ] = {};
 										all_data.from[ id ][ attr ] = cur;
-										all_data.to[ id ][ attr ] = val;
+										all_data.to[ id ][ attr ] = compare;
 										chngd++;
 									}
 								}
 
 								if ( chngd > 0 ) ( function( data ) {
+									data.key = data.key.sort().join( ':' );
 									var fn = new S.Undoer.cmd(
 												function() {
 													var i, el;
 													for ( i in this.data.from ) if ( this.data.from[ has ]( i ) && this.data.to[ has ]( i ) ) {
 														el = S.str4ele( i );
-														if ( qt.isO( el ) )
-															el.attr( this.data.to[ i ] );
+														if ( qt.isO( el ) ) {
+															var v = $.extend( {}, this.data.to[ i ] );
+															if ( qt.is( v['x'] ) ) {
+																var m = ( el.matrix || new S.Matrix ).split();
+																v['x'] = v['x'] - m.dx;
+															} else if ( qt.is( v['cx'] ) ) {
+																var m = ( el.matrix || new S.Matrix ).split();
+																v['cx'] = v['cx'] - m.dx;
+															} else if ( qt.is( v['y'] ) ) {
+																var m = ( el.matrix || new S.Matrix ).split();
+																v['y'] = v['y'] - m.dy;
+															} else if ( qt.is( v['cy'] ) ) {
+																var m = ( el.matrix || new S.Matrix ).split();
+																v['cy'] = v['cy'] - m.dy;
+															}
+															el.attr( v );
+														}
 													}
 												},
 												function() {
 													var i, el;
 													for ( i in this.data.to ) if ( this.data.to[ has ]( i ) ) {
 														el = S.str4ele( i );
-														if ( qt.isO( el ) )
+														if ( qt.isO( el ) ) {
 															el.attr( this.data.from[ i ] );
+														}
 													}
 												},
 												$.extend( true, {}, data )
 											),
 											last = ui.canvas.U.get( 1 );
-									if ( qt.is( last ) &&  'colorpicker' == last.data.type ) {
+									if ( qt.is( last ) && data.type == last.data.type && data.attr == last.data.attr && data.key == last.data.key ) {
 										fn.data.from = last.data.from;
 										ui.canvas.U.replace( fn, 1, false );
 									} else {
@@ -2540,7 +2591,7 @@ var QS = QS || {};
 
 		QS.cbs.add( 'right-menu-register', function( rm ) {
 			rm.register( 'shape-actions', [ {
-				label: 'Send to Back',
+				label: __( 'Send to Back' ),
 				run: function( get_eles ) {
 					var eles = get_eles();
 					eles.forEach( function( item ) {
@@ -2548,7 +2599,7 @@ var QS = QS || {};
 					} );
 				}
 			}, {
-				label: 'Bring to Front',
+				label: __( 'Bring to Front' ),
 				run: function( get_eles ) {
 					var eles = get_eles();
 					eles.forEach( function( item ) {
@@ -2625,7 +2676,7 @@ var QS = QS || {};
 			t.toolbar.add_btn( {
 				ele: t.toolbar.hud.rect( 0, 0, 20, 20 ).attr( { style:'fill:transparent; stroke-dasharray:2, 2;' } ),
 				name: 'marquee',
-				title: 'Mass Selection (Marquee Tool)',
+				title: __( 'Mass Selection (Marquee Tool)' ),
 				start_active: _start_marquee,
 				end_active: _end_marquee
 			} );
@@ -2734,7 +2785,7 @@ var QS = QS || {};
 				},
 				only_click: true,
 				name: 'color',
-				title: 'Fill Color',
+				title: __( 'Fill Color' ),
 				click: function( btn, ev ) { ev.stopPropagation(); btn._cp_shell.trigger( 'toggle' ) }
 			} );
 		} )( 0 );
@@ -2850,7 +2901,7 @@ var QS = QS || {};
 					hud = t.hud;
 					return t.reinit.apply( t, args );
 				} else {
-					throw "No SNAPSVG canvas specified. Buttonbar cannot initialize.";
+					throw __( 'No SNAPSVG canvas specified. Buttonbar cannot initialize.' );
 				}
 
 				return t;
@@ -3052,7 +3103,7 @@ var QS = QS || {};
 					init:function(){},
 					ele: false,
 					name: 'btn-' + ( ++t.bcnt ),
-					title: 'Button ' + t.bcnt,
+					title: __( 'Button' ) + ' ' + t.bcnt,
 					start_active: function() {},
 					end_active: function() {}
 				}, btn );
@@ -3353,7 +3404,7 @@ var QS = QS || {};
 				t.toolbar.add_btn( {
 					ele: t.toolbar.hud.path( 'M0,0L13,10L6,10L11,17L9,19L4,11L0,16z' ).attr( { style:'fill:#fff;' } ),
 					name: 'pointer',
-					title: 'Pointer Tool',
+					title: __( 'Pointer Tool' ),
 					start_active: _pointer_start,
 					end_active: _pointer_end
 				} );
@@ -3363,7 +3414,7 @@ var QS = QS || {};
 						ele: t.utils.hud.path( 'M0,0L10,10L5,10z' ),
 						only_click: true,
 						name: 'toggle-zoom-zones',
-						title: 'Toggle Zoom Zones',
+						title: __( 'Toggle Zoom Zones' ),
 						click: function() {
 							if ( 'draw' == mode ) {
 								_zoom_zone_mode_start();
@@ -3714,27 +3765,32 @@ var QS = QS || {};
 				var sm = ( t.ui.shp.matrix || new S.Matrix ).split(), a = args.atts,
 						x = qt.is( a.cx ) ? a.cx : ( qt.is( a.w ) ? ( a.w / 2 ) - sm.dx : 0 ),
 						y = qt.is( a.cy ) ? a.cy : ( qt.is( a.h ) ? ( a.h / 2 ) - sm.dy : 0 ),
-						m = ( new S.Matrix ).translate( x, y );
-				return t.ui.canvas.circle( 0, 0, a.r || 1 ).transform( m ).appendTo( t.ui.zones );
+						m = ( new S.Matrix ).translate( x, y ),
+						rx = qt.is( a.rx ) ? a.rx : ( qt.is( a.r ) ? a.r : 1 ),
+						ry = qt.is( a.ry ) ? a.ry : ( qt.is( a.r ) ? a.r : 1 );
+				return t.ui.canvas.ellipse( 0, 0, rx, ry ).transform( m ).appendTo( t.ui.zones );
 			}
 
 			t.shape_from_save = function( save ) {
-				var a = { atts: {
-						r: save.meta.r,
-						cx: 0,//qt.toFloat( save.meta.cx || save.meta.x ),
-						cy: 0 //qt.toFloat( save.meta.cy || save.meta.y )
-					} },
-					m = ( new S.Matrix() ).translate( qt.toFloat( save.meta.cx || save.meta.x ), qt.toFloat( save.meta.cy || save.meta.y ) ).rotate( qt.toFloat( save.meta.angle ) ),
-					atts = {
-						'unavail-fill': save.meta['unavail-fill'] || 'rgba( 128, 128, 128, 1 )',
-						'unavail-fill-opacity': qt.is( save.meta['unavail-fill-opacity'] ) ? save.meta['unavail-fill-opacity'] : 1,
-						fill: save.meta.fill || 'rgba( 0, 0, 0, 1 )',
-						'fill-opacity': qt.is( save.meta['fill-opacity'] ) ? save.meta['fill-opacity'] : 1,
-						id: fix_save_id( save.abbr ), //save.abbr || fix_id_field(),
-						locked: save.meta.locked || 0,
-						zone: save.name || '',
-						capacity: save.capacity || ''
-					};
+				var rx = qt.is( save.meta.rx ) ? save.meta.rx : ( qt.is( save.meta.r ) ? save.meta.r : 1 ),
+						ry = qt.is( save.meta.ry ) ? save.meta.ry : ( qt.is( save.meta.r ) ? save.meta.r : 1 ),
+						a = { atts: {
+							rx: rx,
+							ry: ry,
+							cx: 0,//qt.toFloat( save.meta.cx || save.meta.x ),
+							cy: 0 //qt.toFloat( save.meta.cy || save.meta.y )
+						} },
+						m = ( new S.Matrix() ).translate( qt.toFloat( save.meta.cx || save.meta.x ), qt.toFloat( save.meta.cy || save.meta.y ) ).rotate( qt.toFloat( save.meta.angle ) ),
+						atts = {
+							'unavail-fill': save.meta['unavail-fill'] || 'rgba( 128, 128, 128, 1 )',
+							'unavail-fill-opacity': qt.is( save.meta['unavail-fill-opacity'] ) ? save.meta['unavail-fill-opacity'] : 1,
+							fill: save.meta.fill || 'rgba( 0, 0, 0, 1 )',
+							'fill-opacity': qt.is( save.meta['fill-opacity'] ) ? save.meta['fill-opacity'] : 1,
+							id: fix_save_id( save.abbr ), //save.abbr || fix_id_field(),
+							locked: save.meta.locked || 0,
+							zone: save.name || '',
+							capacity: save.capacity || ''
+						};
 				return this.new_shape( a ).attr( atts ).transform( m );
 			}
 
@@ -3753,12 +3809,18 @@ var QS = QS || {};
 				t.create_shape( { atts:{ w:w, h:h } } );
 			}
 
+			t.scale = function( item, orig, sxy, oi, c, ui, xtra ) {
+				//orig.translate( xtra.dxy.dx - xtra.dist.x, xtra.dxy.dy - xtra.dist.y );
+				item.transform( orig ).attr( { rx:xtra.dist.x, ry:xtra.dist.y } );
+			};
+
 			var draw_drag = [
 				function ( dx, dy, x, y, ev ) {
 					if ( t.ui.zones.hasClass( 'drawing' ) && qt.isO( t.partial ) ) {
 						ev.stopPropagation();
 						t.ui.zones.addClass( 'moved' );
-						t.partial.attr( { r:t.ui.canvas.zoom.to_scale( Math.sqrt( ( dx * dx ) + ( dy * dy ) ) ) } );
+						var r = t.ui.canvas.zoom.to_scale( Math.sqrt( ( dx * dx ) + ( dy * dy ) ) );
+						t.partial.attr( { rx:r, ry:r } );
 					}
 				},
 				function ( x, y, ev ) {
@@ -3843,6 +3905,11 @@ var QS = QS || {};
 			save._ele = core_factory.new_from_save( save );
 		} );
 
+		QS.cbs.add( 'qsot-scale-' + shptype, function( item, orig, sxy, oi, c, ui, xtra ) {
+			if ( ! qt.is( core_factory ) ) core_factory = new CF( ui );
+			core_factory.scale.apply( core_factory, [].slice.call( arguments ) );
+		} );
+
 		return CF;
 	} )();
 
@@ -3901,6 +3968,11 @@ var QS = QS || {};
 						};
 				return this.new_shape( a ).attr( atts ).transform( m );
 			}
+
+			t.scale = function( item, orig, sxy, oi, c, ui, xtra ) {
+				orig.translate( xtra.dxy.dx - xtra.dist.x, xtra.dxy.dy - xtra.dist.y );
+				item.transform( orig ).attr( { width:2 * xtra.dist.x, height:2 * xtra.dist.y } );
+			};
 
 			var s = { x:0, y:0 }, last = { dx:0, dy:0, x:0, y:0 }, desc = { x:0, y:0, width:0, height:0 }, draw_drag = [
 				function ( dx, dy, x, y, ev ) {
@@ -4009,6 +4081,11 @@ var QS = QS || {};
 			save._ele = core_factory.new_from_save( save );
 		} );
 
+		QS.cbs.add( 'qsot-scale-' + shptype, function( item, orig, sxy, oi, c, ui, xtra ) {
+			if ( ! qt.is( core_factory ) ) core_factory = new QF( ui );
+			core_factory.scale.apply( core_factory, [].slice.call( arguments ) );
+		} );
+
 		return QF;
 	} )();
 
@@ -4069,6 +4146,11 @@ var QS = QS || {};
 						};
 				return this.new_shape( a ).attr( atts ).transform( m );
 			}
+
+			t.scale = function( item, orig, sxy, oi, c, ui, xtra ) {
+				orig.translate( xtra.dxy.dx - xtra.dist.x, xtra.dxy.dy - xtra.dist.y );
+				item.transform( orig ).attr( { width:2 * xtra.dist.x, height:2 * xtra.dist.y } );
+			};
 
 			var s = { x:0, y:0 }, last = { dx:0, dy:0, x:0, y:0 }, desc = { x:0, y:0, width:0, height:0 }, draw_drag = [
 				function ( dx, dy, x, y, ev ) {
@@ -4174,6 +4256,11 @@ var QS = QS || {};
 		QS.cbs.add( 'create-from-save-' + shptype, function( save, ui ) {
 			if ( ! qt.is( core_factory ) ) core_factory = new RF( ui );
 			save._ele = core_factory.new_from_save( save );
+		} );
+
+		QS.cbs.add( 'qsot-scale-' + shptype, function( item, orig, sxy, oi, c, ui, xtra ) {
+			if ( ! qt.is( core_factory ) ) core_factory = new RF( ui );
+			core_factory.scale.apply( core_factory, [].slice.call( arguments ) );
 		} );
 
 		return RF;
