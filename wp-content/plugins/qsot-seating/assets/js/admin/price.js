@@ -144,7 +144,7 @@
 				};
 				if ( Object.keys( indexed[ new_ind ].structs ).length ) need_check = false;
 				var name = sb.ui.canvas.Selection.items[ i ].attr( 'zone' );
-				zone_str.push( '<span title="' + sb.ui.canvas.Selection.items[ i ].node.tagName + '">' + ( qt.is( name ) ? name : '<span class="empty-name">(empty-name)</span>' ) + '</span>' );
+				zone_str.push( '<span title="' + sb.ui.canvas.Selection.items[ i ].node.tagName + '">' + ( qt.is( name ) ? name : '<span class="empty-name">' + _str( 'empty' ) + '</span>' ) + '</span>' );
 			}
 
 			zone_list.html( zone_str.join( ', ' ) );
@@ -221,7 +221,7 @@
 			console.log( 'dia', dia );
 		}
 
-		sb.e.pricing_btn = $( '<a href="#" class="zone-price-options">customize pricing</a>' ).on( 'click', function( e ) { e.preventDefault(); _pricing_popup(); } ).appendTo( sbsect );
+		sb.e.pricing_btn = $( '<a href="#" class="zone-price-options">' + _str( 'customize pricing' ) + '</a>' ).on( 'click', function( e ) { e.preventDefault(); _pricing_popup(); } ).appendTo( sbsect );
 	} );
 
 	function add_specific_pricing_to_zone( save, ui ) {

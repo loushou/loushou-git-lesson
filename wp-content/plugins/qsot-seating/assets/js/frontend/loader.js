@@ -1,6 +1,12 @@
 // loads the frontend ui for ticket selection
 ( function( $, q, qt ) {
-	var S = $.extend( {}, _qsot_seating_loader );
+	var S = $.extend( { messages:{} }, _qsot_seating_loader );
+
+	function __( name ) {
+		var args = [].slice.call( arguments, 1 ), str = qt.is( S.messages[ name ] ) ? S.messages[ name ] : name, i;
+		for ( i = 0; i < args.length; i++ ) str = str.replace( '%s', args[ i ] );
+		return str;
+	}
 
 	$( function() {
 		// the UI container
@@ -14,8 +20,10 @@
 				run: function() {
 					q.Loader.js( S.assets.res, 'qsot-seating-reservations', 'head', 'append', function() {
 						S.resui = new QS.Reservations( $( '[rel="ticket-selection"]' ), S );
-						q.Features.load( [
-							{
+
+						var modes = [];
+						if ( qt.isO( S.edata ) && qt.isO( S.edata.zones ) && Object.keys( S.edata.zones ).length ) {
+							modes.push( {
 								// svg is the preferred method of interface. if it is available, then load the SVG interface
 								name: 'svg',
 								run: function() {
@@ -26,22 +34,25 @@
 											} );
 										} );
 									else
-										$( '<div class="error">Could not load the required components.</div>' ).appendTo( sel.empty() );
+										$( '<div class="error">' + __( 'Could not load the required components.' ) + '</div>' ).appendTo( sel.empty() );
 								}
-							},
-							{
-								// if svg is not available, then we can fallback to the basic 'dropdown' style, crappy interface that everyone else has
-								name: 'fallback',
-								run: function() {
-									if ( qt.isO( S.assets ) && qt.is( S.assets.svg ) )
-										q.Loader.js( S.assets.nosvg, 'qsot-seating-nosvgui', 'head', 'append', function() {
-											QS.nosvgui( $( '[rel="ticket-selection"]' ).empty(), S );
-										} );
-									else
-										$( '<div class="error">Could not load a required component.</div>' ).appendTo( sel.empty() );
-								}
+							} );
+						}
+
+						modes.push( {
+							// if svg is not available, then we can fallback to the basic 'dropdown' style, crappy interface that everyone else has
+							name: 'fallback',
+							run: function() {
+								if ( qt.isO( S.assets ) && qt.is( S.assets.svg ) )
+									q.Loader.js( S.assets.nosvg, 'qsot-seating-nosvgui', 'head', 'append', function() {
+										QS.nosvgui( $( '[rel="ticket-selection"]' ).empty(), S );
+									} );
+								else
+									$( '<div class="error">' + __( 'Could not load a required component.' ) + '</div>' ).appendTo( sel.empty() );
 							}
-						] );
+						} );
+
+						q.Features.load( modes );
 					} )
 				}
 			},
@@ -49,8 +60,8 @@
 				// if cookies are off, then error out
 				name: 'fallback',
 				run: function() {
-					$( '<div class="error">You do not have cookies enabled, and they are required.</div>' ).appendTo( sel.empty() );
-					alert( 'You must have cookies enabled to purchase tickets.' );
+					$( '<div class="error">' + __( 'You do not have cookies enabled, and they are required.' ) + '</div>' ).appendTo( sel.empty() );
+					alert( __( 'You must have cookies enabled to purchase tickets.' ) );
 				}
 			}
 		] );

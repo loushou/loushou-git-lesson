@@ -1,3 +1,4 @@
+var _qsot_seating_loader = _qsot_seating_loader || {};
 // loads the admin ui for ticket selection
 ( function( $, q, qt ) {
 	var S = $.extend( {}, _qsot_admin_seating_loader );
@@ -22,6 +23,7 @@
 								run: function() {
 									if ( qt.isO( S.assets ) && qt.is( S.assets.svg ) )
 										q.Loader.js( S.assets.snap, 'qsot-seating-snap', 'head', 'append', function() {
+											_qsot_seating_loader = S;
 											q.Loader.js( S.assets.svg, 'qsot-seating-svgui', 'head', 'append', function() {
 												function add_elements( eles, pui, tS ) {
 													eles.inner_change_zones = $( tS.templates['inner:change:zones'] ).appendTo( eles.inner_change );

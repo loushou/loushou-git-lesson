@@ -82,11 +82,13 @@ class QSOT_seating_order_admin {
 	public static function add_zone_to_order_item_display( $item_id, $item, $_product ) {
 		if ( 'yes' != $_product->ticket ) return;
 
-		$display = '(unselected)';
+		$display = __( '(unselected)', 'qsot-seating' );
 		if ( isset( $item['zone_id'] ) && ! empty( $item['zone_id'] ) ) {
 			$zone = apply_filters( 'qsot-zoner-get-zone-info', false, $item['zone_id'] );
 			if ( is_object( $zone ) )
-				$display = apply_filters( 'the_title', $zone->name );
+				$display = apply_filters( 'the_title', ( ! empty( $zone->name ) ) ? $zone->name : $zone->abbr );
+		} else if ( isset( $item['zone_id'] ) && '0' === $item['zone_id'] ) {
+			$display = __( '"General Admission"', 'qsot-seating' );
 		}
 
 		?><div class="info"><strong><?php _e( 'Seat:', 'qsot-seating' ) ?></strong> <?php echo $display ?></div><?php
@@ -197,6 +199,10 @@ class QSOT_seating_order_admin {
 		if ( is_user_logged_in() && current_user_can( 'edit_posts' ) && isset( $_POST['n'], $_POST['ei'], $_POST['sa'], $_POST['oid'] ) && wp_verify_nonce( $_POST['n'], 'qsot-admin-seat-selection-' . ( (int)$_POST['oid'] ) ) ) {
 			$sa = $_POST['sa'];
 
+			// clear any current locks that may have expired on the desired event
+			if ( (int)$_POST['ei'] > 0 )
+				do_action( 'qsot-zoner-clear-locks', $_POST['ei'] );
+
 			// perform this specific sub action if a filter exists for it
 			if ( has_action( 'qsots-admin-ajax-' . $sa ) )
 				$resp = apply_filters( 'qsots-admin-ajax-' . $sa, $resp, $sa );
@@ -210,7 +216,7 @@ class QSOT_seating_order_admin {
 		}
 
 		// output results in json format by default
-		echo @json_encode( $resp );
+		echo @wp_send_json( $resp );
 		exit;
 	}
 
@@ -385,7 +391,7 @@ class QSOT_seating_order_admin {
 		$resp['e'] = $resp['r'] = array();
 		$order_id = (int)$_POST['oid'];
 
-		$raw_owns = apply_filters( 'qsot-zoner-ownerships-current-user', array(), array( 'event' => $event_id ) );
+		$raw_owns = apply_filters( 'qsot-zoner-ownerships', array(), array( 'event' => $event_id, 'order_id' => $order_id, 'customer_id' => '' ) );
 		$ownerships = array();
 		foreach ( $raw_owns as $st => $group ) {
 			$ownerships[ $st ] = array();
@@ -399,7 +405,7 @@ class QSOT_seating_order_admin {
 		foreach ( $_POST['items'] as $item ) {
 			$item['z'] = (int)$item['z'];
 			$item['t'] = (int)$item['t'];
-			$item['st'] = 'r' == $item['st'] ? self::$o->{'z.states.r'} : self::$o->{'z.states.i'};
+			$item['st'] = ( isset( $item['st'] ) && 'r' == $item['st'] ) ? self::$o->{'z.states.r'} : self::$o->{'z.states.i'};
 
 			if ( ! apply_filters( 'qsot-zoner-is-zone-for-event', false, $item['z'], $event_id ) ) {
 				$resp['e'][] = sprintf( __( 'The specified zone is not available for this event. [%s]', 'qsot-seating' ), $item['z'] );
@@ -407,7 +413,15 @@ class QSOT_seating_order_admin {
 			}
 			$zone = apply_filters( 'qsot-zoner-get-zone-info', false, $item['z'] );
 
-			if ( ! isset( $ownerships[ $item['st'] ][ $item['z'] . '' ][ $item['t'] . '' ] ) || empty( $ownerships[ $item['st'] ][ $item['z'] . '' ][ $item['t'] . '' ] ) ) {
+			// check if the ownership exists
+			$exists = isset( $ownerships[ $item['st'] ][ $item['z'] . '' ][ $item['t'] . '' ] ) && ! empty( $ownerships[ $item['st'] ][ $item['z'] . '' ][ $item['t'] . '' ] );
+			// if this is an interest type, and there is no match, check the 'no ticket type' group for a match. if a match is found, then update the search ticket type to 0
+			if ( ! $exists && $item['st'] == self::$o->{'z.states.i'} && isset( $ownerships[ $item['st'] ][ $item['z'] . '' ]['0'] ) && ! empty( $ownerships[ $item['st'] ][ $item['z'] . '' ]['0'] ) ) {
+				$exists = true;
+				$item['t'] = 0;
+			}
+
+			if ( ! $exists ) {
 				$resp['e'][] = sprintf( __( 'You do not own any tickets for %s that are marked [%s].', 'qsot-seating' ), $zone->name, $item['st'] );
 				continue;
 			}

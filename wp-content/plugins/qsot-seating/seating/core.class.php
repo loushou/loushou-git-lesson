@@ -85,6 +85,7 @@ class QSOT_seating_core {
 			add_action( 'woocommerce_cart_item_removed', array( __CLASS__, 'upon_cart_remove_item' ), 5, 2 );
 			add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'order_status_changed' ), 100, 3 );
 			add_action( 'woocommerce_add_order_item_meta', array( __CLASS__, 'update_ticket_order_information' ), 100000, 3 );
+			add_action( 'qsot-draw-event-area-image', array( __CLASS__, 'draw_event_area_image' ), 100, 3 );
 
 			// item displays
 			add_action( 'woocommerce_get_item_data', array( __CLASS__, 'add_zone_name_to_cart' ), 10, 2 );
@@ -100,6 +101,8 @@ class QSOT_seating_core {
 		remove_filter( 'qsot-zoner-reserve-current-user', array( 'qsot_seat_pricing', 'reserve_current_user' ), 100 );
 		remove_action( 'woocommerce_cart_item_removed', array( 'qsot_seat_pricing', 'upon_cart_remove_item' ), 5 );
 		remove_action( 'woocommerce_before_cart_item_quantity_zero', array( 'qsot_seat_pricing', 'delete_cart_ticket' ), 10 );
+
+		remove_action( 'qsot-draw-event-area-image', array( 'qsot_event_area', 'draw_event_area_image' ), 100 );
 
 		remove_action( 'woocommerce_order_status_changed', array( 'qsot_seat_pricing', 'order_status_changed'), 100 );
 		global $wp_filter;
@@ -148,7 +151,8 @@ class QSOT_seating_core {
 
 		wp_enqueue_style( 'qsot-seating-frontend-ui' );
 		wp_enqueue_script( 'qsot-seating-loader' );
-		wp_localize_script( 'qsot-seating-loader', '_qsot_seating_loader', array(
+
+		$args = array(
 			'assets' => array(
 				'snap' => $url . 'js/libs/snapsvg/snap.svg' /*. $debug */ . '.js',
 				'svg' => $url . 'js/frontend/ui.js',
@@ -156,12 +160,22 @@ class QSOT_seating_core {
 				'res' => $url . 'js/frontend/reservations.js',
 			),
 			'nonce' => wp_create_nonce( 'qsot-frontend-seat-selection-' . $event->ID ),
-			'edata' => self::frontend_edata( $event ),
+			'options' => array(
+				'one-click' => 'yes' == self::$options->{'qsot-seating-one-click-single-price'},
+			),
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'templates' => apply_filters( 'qsot-seating-frontend-templates', array(), $event ),
 			'messages' => apply_filters( 'qsot-seating-frontend-msgs', array(), $event ),
-			'owns' => self::owns_for_frontend( apply_filters( 'qsot-zoner-ownerships-current-user', array(), $event->ID, 0, false ), $event ),
-		) );
+			'edata' => false,
+			'owns' => false,
+		);
+
+		if ( apply_filters( 'qsot-can-sell-tickets-to-event', false, $event->ID ) ) {
+			$args['edata'] = self::frontend_edata( $event );
+			$args['owns'] = self::owns_for_frontend( apply_filters( 'qsot-zoner-ownerships-current-user', array(), $event->ID, 0, false ), $event );
+		}
+
+		wp_localize_script( 'qsot-seating-loader', '_qsot_seating_loader', $args );
 	}
 
 	// create a list of this user's ownerships for the frontend ui
@@ -204,9 +218,10 @@ class QSOT_seating_core {
 		$pricing = self::_get_event_pricing( $event->ID );
 		$ticket_types = array();
 		// aggregate a unique list of ticket types from the pricing table
-		foreach ( $pricing->prices as $group => $products )
-			foreach ( $products as $product )
-				$ticket_types[ $product['product_id'] ] = $product;
+		if ( isset( $pricing, $pricing->prices ) && is_array( $pricing->prices ) )
+			foreach ( $pricing->prices as $group => $products )
+				foreach ( $products as $product )
+					$ticket_types[ $product['product_id'] ] = $product;
 
 		// put it all together in a format that the frontend will understand
 		$out = array(
@@ -215,13 +230,15 @@ class QSOT_seating_core {
 			'ticket' => false,
 			'link' => get_permalink( $event->ID ),
 			'parent_link' => get_permalink( $event->post_parent ),
-			'ps' => $pricing->prices,
+			'ps' => ( isset( $pricing, $pricing->prices ) && is_array( $pricing->prices ) ) ? $pricing->prices : array(),
 			'tts' => $ticket_types,
 			'capacity' => $event->meta->capacity,
 			'available' => $event->meta->available,
 			'zones' => self::_remove_unneeded_zone_data( $zones ),
 			'zzones' => self::_remove_unneeded_zone_data( $zzones ),
 		);
+		$out['zone_count'] = count( $out['zones'] );
+		$out['tt_count'] = count( $out['tts'] );
 		$out['stati'] = $stati;
 
 		return apply_filters( 'qsoti-seating-frontend-event-data', $out, $event );
@@ -233,7 +250,7 @@ class QSOT_seating_core {
 		// aggregate the capacity of each zone
 		foreach ( $zones as $zone )
 			if ( isset( $zone->id, $zone->capacity ) )
-				$out[ $zone->id . '' ] = (int)$zone->capacity;
+				$out[ $zone->id . '' ] = array( (int)$zone->capacity, (int)$zone->capacity );
 		
 		// get a condensed list of all reservations for the event
 		$all_claimed = apply_filters( 'qsot-zoner-event-zone-reservations', array(), array( 'event' => $event ) );
@@ -241,7 +258,7 @@ class QSOT_seating_core {
 		// subtract all reservations from the capacities from above to create a final availability number
 		foreach ( $all_claimed as $zid => $total )
 			if ( isset( $out[ $zid . '' ] ) )
-				$out[ $zid . '' ] = max( 0, $out[ $zid . '' ] - $total );
+				$out[ $zid . '' ][1] = max( 0, $out[ $zid . '' ][1] - $total );
 
 		// testing only
 		//foreach ( $out as $z => $rem ) if ( rand( 0, 1 ) ) $out[ $z ] = 0;
@@ -264,6 +281,21 @@ class QSOT_seating_core {
 		$current['Available'] = __( 'Available', 'qsot-seating' );
 		$current['Available (%s)'] = __( 'Available (%s)', 'qsot-seating' );
 		$current['Unavailable'] = __( 'Unavailable', 'qsot-seating' );
+		$current['Could not show interest in those tickets.'] = __( 'Could not show interest in those tickets.', 'qsot-seating' );
+		$current['Could not reserve those tickets.'] = __( 'Could not reserve those tickets.', 'qsot-seating' );
+		$current['Could not remove those tickets.'] = __( 'Could not remove those tickets.', 'qsot-seating' );
+		$current['Could not load the required components.'] = __( 'Could not load the required components.', 'qsot-seating' );
+		$current['Could not load a required component.'] = __( 'Could not load a required component.', 'qsot-seating' );
+		$current['You do not have cookies enabled, and they are required.'] = __( 'You do not have cookies enabled, and they are required.', 'qsot-seating' );
+		$current['You must have cookies enabled to purchase tickets.'] = __( 'You must have cookies enabled to purchase tickets.', 'qsot-seating' );
+		$current['There are not enough %s tickets available.'] = __( 'There are not enough %s tickets available.', 'qsot-seating' );
+		$current['Could not reserve a ticket for %s.'] = __( 'Could not reserve a ticket for %s.', 'qsot-seating' );
+		$current['Could not remove the tickets for %s.'] = __( 'Could not remove the tickets for %s.', 'qsot-seating' );
+		$current['Zoom-In'] = __( 'Zoom-In', 'qsot-seating' );
+		$current['Zoom-Out'] = __( 'Zoom-Out', 'qsot-seating' );
+		$current['Reset Zoom'] = __( 'Reset Zoom', 'qsot-seating' );
+		$current['Button'] = __( 'Button', 'qsot-seating' );
+		$current['No SNAPSVG canvas specified. Buttonbar cannot initialize.'] = __( 'No SNAPSVG canvas specified. Buttonbar cannot initialize.', 'qsot-seating' );
 
 		return $current;
 	}
@@ -302,8 +334,8 @@ class QSOT_seating_core {
 						. '<div class="form-title" rel="title"></div>'
 					. '</div>'
 					. '<div rel="owns"></div>'
+					. '<div class="selection-nosvg" rel="nosvg"></div>'
 				. '</div>'
-				. '<div class="selection-nosvg" rel="nosvg"></div>'
 				. '<div class="actions" rel="actions">'
 					. '<a href="' . esc_attr( $cart_url ) . '" class="button" rel="cart-btn">' . __( 'Proceed to Cart', 'qsot-seating' ) . '</a>'
 				. '</div>'
@@ -349,7 +381,7 @@ class QSOT_seating_core {
 			. '</div>';
 
 		$list['tt-display'] = '<span class="ticket-description">'
-				. '[<span class="zone" rel="zone-name"></span>] '
+				. '<span class="zone-wrap">[<span class="zone" rel="zone-name"></span>] </span>'
 				. '<span class="name" rel="ttname"></span> '
 				. '(<span class="price" rel="ttprice"></span>)'
 			. '</span>';
@@ -358,7 +390,7 @@ class QSOT_seating_core {
 		$list['zone-option'] = '<option value="" class="zone-option"></option>';
 		$list['zone-single'] = '<span class="zone-name-wrap">'
 				. '<input type="hidden" name="zone" value="" rel="zone" />'
-				. '<span class="zone-name"></span>'
+				. '<span class="zone-name" rel="name"></span>'
 			. '</span>';
 
 		$list['tt-select'] = '<select name="ticket-type" rel="ticket-type"></select>';
@@ -368,6 +400,9 @@ class QSOT_seating_core {
 				. '<span class="name" rel="ttname"></span>'
 				. '<span class="price" rel="ttprice"></span>'
 			. '</span>';
+
+		$list['helper:available'] = '<span>' . sprintf( __( 'There are currently %s tickets available.', 'qsot-seating' ), '<span class="available"></span>' ) . '</span>';
+		$list['helper:more-available'] = '<span>' . sprintf( __( 'There are currently %s more tickets available.', 'qsot-seating' ), '<span class="available"></span>' ) . '</span>';
 
 		$list['psui'] = '<div class="price-selection-ui">'
 				. '<div class="price-selection-error" rel="error">'
@@ -432,6 +467,59 @@ class QSOT_seating_core {
 		return $post_types;
 	}
 
+	// draw the event area image, for any event that has an image defined
+	public static function draw_event_area_image( $event, $area=false, $reserved=array() ) {
+		// if the event is not valid, then dont even attempt to show anything
+		if ( ! is_object( $event ) || ! isset( $event->ID ) )
+			return;
+
+		// if the event is not passed, and it has zones, then skip this also, because the seating chart will show this image already
+		if ( apply_filters( 'qsot-can-sell-tickets-to-event', false, $event->ID ) && isset( $event->zones ) && ! empty( $event->zones ) )
+			return;
+
+		// if the event_area was not passed, then attempt to loaded it from the event
+		if ( ! is_object( $area ) || ! isset( $area->ID ) ) {
+			$ea_id = (int)get_post_meta( $event->ID, self::$o->{'meta_key.event_area'}, true );
+			if ( $ea_id <= 0 )
+				return;
+			$area = get_post( $ea_id );
+		// if it was passed, then fetch the id
+		} else {
+			$ea_id = $area->ID;
+		}
+
+		// first attempt to get the featured image as the event area image
+		$thumb_id = (int)get_post_meta( $ea_id, self::$o->{'event_area.mk.img'}, true );
+
+		// if there was not a featured image and if the event has zones, check all the zones, in zindex order from lowest to highest, for the first bgimage defined
+		if ( $thumb_id <= 0 && isset( $event->zones ) && is_array( $event->zones ) ) {
+			$images_ordered = array();
+			// get a list of all BG images in the seating chart
+			foreach ( $event->zones as $zone )
+				if ( isset( $zone->meta, $zone->meta['_type'], $zone->meta['_order'], $zone->meta['image-id'], $zone->meta['bg'] ) && 'image' == $zone->meta['_type'] && $zone->meta['bg'] && $zone->meta['image-id'] > 0 )
+					$images_ordered[ $zone->meta['_order'] ] = $zone->meta['image-id'];
+
+			// if there are any images
+			if ( count( $images_ordered ) ) {
+				// sort them by their zindex
+				ksort( $images_ordered, SORT_NUMERIC );
+				// use the lowest zindex image as the bg image
+				$thumb_id = current( $images_ordered );
+			}
+		}
+
+		if ( $thumb_id > 0 ) {
+			list( $thumb_url, $w, $h, $rs ) = wp_get_attachment_image_src( $thumb_id, 'full' );
+			if ( $thumb_url ) {
+				?>
+				<div class="event-area-image-wrap">
+					<img src="<?php echo esc_attr( $thumb_url ) ?>" class="event-area-image" alt="Image of the <?php echo esc_attr( apply_filters( 'the_title', $area->post_title ) ) ?>" />
+				</div>
+				<?php
+			}
+		}
+	}
+
 	// generic function designed to handle the ajax requests from the frontend
 	public static function handle_frontend_ajax() {
 		$resp = array( 's' => false );
@@ -466,10 +554,19 @@ class QSOT_seating_core {
 		}
 
 		$event_id = (int)$_POST['ei'];
+		$event = apply_filters( 'qsot-get-event', false, $event_id );
+		if ( ! is_object( $event ) ) {
+			$resp['e'] = array( __( 'That event does not exist.', 'qsot-seating' ) );
+			return $resp;
+		}
+
+		$ea_id = isset( $event->meta, $event->meta->event_area ) ? $event->meta->event_area : 0;
+		$event->zones = apply_filters( 'qsot-get-seating-zones', array(), $ea_id, 1 );
 		$resp['e'] = $resp['r'] = array();
 
 		// for each zone that needs and interest
 		foreach ( $_POST['items'] as $item ) {
+			$q = isset( $item['q'] ) && $item['q'] > 0 ? (int)$item['q'] : 1;
 			// validate that this zone is actually part of the requested event
 			if ( ! apply_filters( 'qsot-zoner-is-zone-for-event', false, (int)$item['z'], $event_id ) ) {
 				$resp['e'][] = sprintf( __( 'The specified zone is not available for this event. [%s]', 'qsot-seating' ), $item['z'] );
@@ -478,13 +575,15 @@ class QSOT_seating_core {
 
 			// make sure this zone has available tickets
 			$zone = apply_filters( 'qsot-zoner-get-zone-info', false, $item['z'] );
-			if ( ! apply_filters( 'qsot-zoner-get-event-zone-available', false, (int)$item['z'], $event_id ) ) {
+			if ( 0 == $item['z'] ) $zone->capacity = self::$o->{'meta_key.capacity'};
+			if ( ! ( $available = apply_filters( 'qsot-zoner-get-event-zone-available', false, (int)$item['z'], $event_id ) ) ) {
 				$resp['e'][] = sprintf( __( 'The zone [%s] does not have enough available tickets.', 'qsot-seating' ), is_object( $zone ) ? $zone->name : 'unknown');
 				continue;
 			}
+			$q = min( $q, $available );
 
 			// actually process the interest request for this zone
-			$res = apply_filters( 'qsot-zoner-interest-current-user', false, array( 'event' => $event_id, 'zone_id' => $item['z'], 'count' => 1 ) );
+			$res = apply_filters( 'qsot-zoner-interest-current-user', false, array( 'event' => $event_id, 'zone_id' => $item['z'], 'count' => $q ) );
 			$success = false;
 			// parse the results of the request, and create an appropriate response for the frontend
 			if ( ! is_wp_error( $res ) ) {
@@ -496,7 +595,7 @@ class QSOT_seating_core {
 			$resp['r'][] = array(
 				'z' => $item['z'],
 				't' => 0,
-				'q' => 1,
+				'q' => $q,
 				's' => $success,
 				'c' => apply_filters( 'qsot-zoner-get-event-zone-available', false, $item['z'], $event_id, array( 'force' => true ) ),
 			);
@@ -903,7 +1002,7 @@ class QSOT_seating_core {
 			if ( is_object( $zone ) ) {
 				$list[] = array(
 					'name' => __( 'Seat', 'qsot-seating' ),
-					'display' => apply_filters( 'the_title', $zone->name ),
+					'display' => apply_filters( 'the_title', ( ! empty( $zone->name ) ) ? $zone->name : $zone->abbr ),
 				);
 			}
 		}
@@ -933,9 +1032,6 @@ class QSOT_seating_core {
 		}
 
 		return $info;
-	}
-
-	protected static function _setup_admin_options() {
 	}
 
 	// add the seating information to the seating chart
@@ -1252,6 +1348,35 @@ class QSOT_seating_core {
 		}
 	}
 
+	protected static function _setup_admin_options() {
+		self::$options->def( 'qsot-seating-one-click-single-price', 'yes' );
+
+		self::$options->add(array(
+			'order' => 400,
+			'type' => 'title',
+			'title' => __( 'Seating', 'qsot-seating' ),
+			'id' => 'heading-frontend-seating-1',
+			'page' => 'frontend',
+		));
+
+		self::$options->add(array(
+			'order' => 410,
+			'id' => 'qsot-seating-one-click-single-price',
+			'type' => 'checkbox',
+			'title' => __( 'One-click reservations', 'qsot-seating' ),
+			'desc' => __( 'When there is a single price level available for a seat, and the maximum capacity for the seat is "1", then allow the user to click one time to reserve the seat, instead of once to choose the seat and once to select a price level.', 'qsot-seating' ),
+			'default' => 'yes',
+			'page' => 'frontend',
+		));
+
+		self::$options->add(array(
+			'order' => 499,
+			'type' => 'sectionend',
+			'id' => 'heading-frontend-seating-1',
+			'page' => 'frontend',
+		));
+	}
+
 	public static function on_activation() {
 		global $wpdb;
 
@@ -1282,6 +1407,96 @@ class QSOT_seating_core {
 				'inherit'
 			);
 			$wpdb->query( $q );
+		}
+
+		// trigger the table updater
+		if ( has_action( 'qsot-db-upgrader-trigger' ) ) {
+			do_action( 'qsot-db-upgrader-trigger' );
+		} else if ( class_exists( 'qsot_db_upgrader' ) ) {
+			qsot_db_upgrader::admin_init();
+		}
+
+		global $wpdb;
+
+		$per = 500;
+		$offset = 0;
+		$q = 'select id from ' . $wpdb->posts . ' where post_type = %s order by id limit %d offset %d';
+
+		$lookup = array();
+
+		// on activate, cycle through all event areas
+		while ( $event_area_ids = $wpdb->get_col( $wpdb->prepare( $q, self::$o->{'event_area.post_type'}, $per, $offset ) ) ) { $offset += $per;
+			self::_memory_check();
+			$structs_by_ea = apply_filters( 'qsot-get-price-structures', array(), array( 'event_area_id' => $event_area_ids ) );
+
+			// for each event area, check if the 'multi price structure' has been set
+			foreach ( $event_area_ids as $ea_id ) {
+				if ( isset( $structs_by_ea[$ea_id] ) ) {
+					if ( ! isset( $lookup[$ea_id] ) )
+						$lookup[$ea_id] = current( $structs_by_ea[$ea_id] )->id;
+					continue;
+				}
+				$lookup[$ea_id] = 0;
+
+				// fetch the singular legacy pricing event price
+				$ticket_type_id = (int)get_post_meta( $ea_id, '_pricing_options', true );
+
+				// if there is no multi price structure for the event, then create a generic one
+				$wpdb->insert(
+					$wpdb->qsot_price_structs,
+					array( 'event_area_id' => $ea_id, 'name' => __( 'Generic Pricing', 'qsot' ) )
+				);
+				$ps_id = $wpdb->insert_id;
+
+				// if there is not a legacy price
+				if ( $ticket_type_id <= 0 ) continue; // create the structure, but do not add prices to it, if there are no legacy prices to add
+
+				// if the price structure was create successfully, then add the one generic legacy price to it
+				if ( $ps_id > 0 ) {
+					$wpdb->insert(
+						$wpdb->qsot_price_struct_prices,
+						array( 'price_struct_id' => $ps_id, 'display_order' => 0, 'product_id' => $ticket_type_id )
+					);
+					// record the default 'generic pricing' pricing struct for this event area, for later user on even correction
+					$lookup[$ea_id] = $ps_id;
+				}
+			}
+		}
+
+		$q = 'select id from ' . $wpdb->posts . ' where post_type = %s order by id limit %d offset %d';
+		$offset = 0;
+
+		// now that all the event areas have multi pricing setup, cycle through the events, and update any that are not using the multi price
+		while ( $event_ids = $wpdb->get_col( $wpdb->prepare( $q, self::$o->core_post_type, $per, $offset ) ) ) { $offset += $per;
+			foreach ( $event_ids as $event_id ) {
+				// if the event is already using a multi price structure, then skip this update
+				$ps_id = get_post_meta( $event_id, '_pricing_struct_id', true);
+				if ( $ps_id > 0 ) continue;
+
+				// lookup the proper price_struct_id based on the event area
+				$ea_id = get_post_meta( $event_id, '_event_area_id', true );
+				$ps_id = isset( $lookup[$ea_id] ) ? $lookup[$ea_id] : '';
+
+				// update the event, pricing struct to the proper generic one, if we found it
+				update_post_meta( $event_id, '_pricing_struct_id', $ps_id );
+			}
+		}
+	}
+
+	// used to check the memory usage and blow out any relevant caches, during the intallation process
+	protected static function _memory_check($flush_percent_range=80) {
+		global $wpdb;
+		static $max = false;
+		$dec = $flush_percent_range / 100;
+
+		// fetch the known max memory lmit, if it was not already fetched
+		if ($max === false) $max = QSOT::memory_limit(true);
+
+		$usage = memory_get_usage();
+		// determine if the current usage is too high. if it is, then blow out some caches
+		if ($usage > $max * $dec) {
+			wp_cache_flush();
+			$wpdb->queries = array();
 		}
 	}
 
@@ -1319,6 +1534,10 @@ class QSOT_seating_core {
 
 	public static function setup_tables( $tables ) {
     global $wpdb;
+		
+		// skip this if the func is called before the needed vars are set yet (like in a late OTCE activation)
+		if ( ! isset( $wpdb->qsot_event_zone_to_order ) )
+			return $tables;
 
 		// if the opentickets plugin is at a version before we improved the db updater, then run the upgrae manually
 		if ( class_exists( 'QSOT' ) && version_compare( QSOT::version(), '1.10.6' ) <= 0 ) {
@@ -1327,6 +1546,28 @@ class QSOT_seating_core {
 			if ( ! isset( $versions[ $wpdb->qsot_price_struct_prices ] ) || version_compare( $versions[ $wpdb->qsot_price_struct_prices ], '0.1.6' ) < 0 )
 				self::version_1_0_1_upgrade();
 		}
+
+    $tables[$wpdb->qsot_event_zone_to_order] = array(
+      'version' => '1.1.7',
+      'fields' => array(
+				'event_id' => array( 'type' => 'bigint(20) unsigned' ), // post of type qsot-event
+				'order_id' => array( 'type' => 'bigint(20) unsigned' ), // post of type shop_order (woocommerce)
+				'zone_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // the id of the zone this reservation is for
+				'quantity' => array( 'type' => 'smallint(5) unsigned' ), // some zones can have more than 1 capacity, so we need a quantity to designate how many were purchased ina given zone
+				'state' => array( 'type' => 'varchar(20)' ), // word descriptor for the current state. core states are interest, reserve, confirm, occupied
+				'since' => array( 'type' => 'timestamp', 'default' => 'CONST:|CURRENT_TIMESTAMP|' ), // when the last action took place. used for lockout clearing
+				'session_customer_id' => array( 'type' => 'varchar(150)' ), // woo session id for linking a ticket to a user, before the order is actually created (like interest and reserve statuses)
+				'ticket_type_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // product_id of the woo product that represents the ticket that was purchased/reserved
+				'order_item_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // order_item_id of the order item that represents this ticket. present after order creation
+      ),
+      'keys' => array(
+        'KEY evt_id (event_id)',
+        'KEY ord_id (order_id)',
+				'KEY z_id (zone_id)',
+        'KEY oiid (order_item_id)',
+				'KEY stt (state)',
+      )
+    );
 
     $tables[ $wpdb->qsot_seating_zones ] = array(
       'version' => '0.2.0',

@@ -57,6 +57,9 @@ body .qsot-event-area-ticket-selection h4 { margin:0; padding:0; line-height:1; 
 .price-selection-ui .available-prices ul li { padding:0 0.5em; border-top:1px solid #777; cursor:pointer; }
 .price-selection-ui .available-prices ul li:first-child { border-top:0 none; }
 
+.ticket-type-wrap .name { margin-right:0.6em; }
+.ticket-type-wrap .name:after { content:"-"; margin-left:0.6em; }
+
 
 /* seating ui buttons */
 .ui-btn .shell { fill:#ccc; stroke:#777; stroke-width:1px; }
