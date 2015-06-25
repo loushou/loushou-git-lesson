@@ -22,10 +22,9 @@
 		}
 
 		function _aj( data, func, efunc ) {
-			var me = this,
-					func = qt.isF( func ) ? func : function(){},
-					efunc = qt.isF( efunc ) ? efunc : function( r ) { _generic_efunc( r ); },
+			var me = this;
 					data = $.extend( { sa:'unknown' }, data, { action:'qsots-admin-ajax', n:me.o.nonce, ei:me.o.edata.id, oid:$( '#post_ID' ).val() } );
+			console.log( 'AJAX me', me );
 
 			$.ajax( {
 				url: me.o.ajaxurl,
@@ -66,11 +65,6 @@
 			me.e.msgs = $( me.tmpl( 'msg-block' ) ).insertBefore( me.e.main );
 			me.e.errors = me.e.msgs.find( '[rel="errors"]' );
 			me.e.confirms = me.e.msgs.find( '[rel="confirms"]' );
-
-			// compat with ui.js for removed-res-int-raw action
-			me.e.owns_wrap = $();
-			me.e.owns = $();
-			me.e.ubtn = $();
 		}
 
 		function _setup_events() {
@@ -78,7 +72,9 @@
 
 			me.e.psui.on( 'click', '[rel="close"]', function( e ) {
 				e.preventDefault();
-				me.e.psui.trigger( 'early-close' );
+				var items = me.e.psui.data( 'items' );
+				me.e.psui.removeData( 'items' );
+				me.remove( { items:items } );
 				_reset_ps.call( me );
 			} );
 		}
@@ -166,7 +162,6 @@
 			} else if ( qt.isA( r.e ) && r.e.length ) {
 				_error_msg.apply( this, r.e );
 			}
-			QS.cbs.trigger( 'removed-res-int-raw', [ r, req, this ] )
 		}
 
 		function _fail_remove( req, r ) {
@@ -219,10 +214,10 @@
 			// update stuff. not sure what yet
 			if ( qt.isO( this.o.tsui ) && qt.isF( this.o.tsui._update_order_items ) )
 				this.o.tsui._update_order_items( function( r ) {
+					console.log( 'UPDATE TABLE', r );
 					if ( qt.isO( r ) && qt.isA( r.i ) ) {
-						var par = $( '#order_line_items' ), i;
-						if ( par.children().length )
-							par.empty();
+						var par = $( '#order_line_items' ).empty(), i;
+						console.log( 'par', par, me.e );
 						for ( i = 0; i < r.i.length; i++ )
 							$( r.i[ i ] ).appendTo( par );
 					}
@@ -284,17 +279,16 @@
 
 			_name: function( zid ) { return qt.is( this.names[ zid + '' ] ) ? this.names[ zid + '' ] : this.unknown; },
 
-			price_selection: function( items, upon_select_func, early_close ) {
+			price_selection: function( items, upon_select_func ) {
 				var me = this, common_prices = _common_prices.call( this, items ), znames = [], max_qty, i;
 				
 				for ( i = 0; i < items.length; i++ ) {
 					if ( qt.is( me.z[ items[ i ].zone ] ) && qt.is( me.o.edata.stati[ items[ i ].zone ] ) ) {
 						znames.push( me.z[ items[ i ].zone ].name );
-						if ( ! qt.is( max_qty ) ) max_qty = me.o.edata.stati[ items[ i ].zone ][1];
-						else max_qty = Math.min( max_qty, me.o.edata.stati[ items[ i ].zone ][1] );
+						if ( ! qt.is( max_qty ) ) max_qty = me.o.edata.stati[ items[ i ].zone ];
+						else max_qty = Math.min( max_qty, me.o.edata.stati[ items[ i ].zone ] );
 					}
 				}
-				console.log( 'PSUI', common_prices, znames, max_qty );
 				me.e.ps_sel_list.text( znames.join( ', ' ) );
 				me.e.ps_qty.attr( 'max', max_qty + '' );
 				if ( max_qty > 1 ) me.e.ps_qty_ui.show();
@@ -313,18 +307,6 @@
 				} )( common_prices[ i ] );
 
 				var pdims = { width:me.e.main_wrap.width(), height:me.e.main_wrap.height() }
-
-				this.e.psui.off( 'early-close.psui' ).on( 'early-close.psui', function( e ) {
-					if ( qt.isF( early_close ) ) {
-						early_close( e, items );
-					}
-					var data = { items:items }, i;
-					for ( i = 0; i < data.items.length; i++ ) {
-						data.items[ i ]['state'] = 'i';
-						data.items[ i ]['ticket-type'] = 0;
-					}
-					me.remove( data );
-				} );
 
 				this.e.psui.data( 'items', items ).show();
 				var dims = { width:me.e.ps_box.width(), height:me.e.ps_box.height() };

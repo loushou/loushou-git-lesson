@@ -111,7 +111,6 @@
 
 			me.e.psui.on( 'click', '[rel="close"]', function( e ) {
 				e.preventDefault();
-				me.e.psui.trigger( 'early-close' );
 				_reset_ps.call( me );
 			} );
 		}
@@ -272,9 +271,7 @@
 			row.find( '[rel="ticket-type"]' ).val( item.t );
 			row.find( '[rel="zone"]' ).val( item.z );
 
-			ele.find( '[rel="zone-name"]' ).html( zone.name || zone.abbr );
-			if ( this.o.edata.zone_count < 1 )
-				ele.find( '[rel="zone-name"]' ).parent().hide();
+			ele.find( '[rel="zone-name"]' ).html( zone.name );
 			ele.find( '[rel="ttname"]' ).html( tt.product_name );
 			ele.find( '[rel="ttprice"]' ).html( tt.product_raw_price );
 		}
@@ -401,24 +398,20 @@
 
 			_name: function( zid ) { return qt.is( this.names[ zid + '' ] ) ? this.names[ zid + '' ] : this.unknown; },
 
-			price_selection: function( items, upon_select_func, early_close ) {
-				var me = this, req = _req_from_data( { items:items.slice(0) } ), common_prices = _common_prices.call( this, req.items ), znames = [], max_qty, i;
+			price_selection: function( items, upon_select_func ) {
+				var me = this, common_prices = _common_prices.call( this, items ), znames = [], max_qty, i;
 				
 				for ( i = 0; i < items.length; i++ ) {
-					if ( qt.is( me.z[ items[ i ].zone ] ) && qt.isA( me.o.edata.stati[ items[ i ].zone ] ) ) {
+					if ( qt.is( me.z[ items[ i ].zone ] ) && qt.is( me.o.edata.stati[ items[ i ].zone ] ) ) {
 						znames.push( me.z[ items[ i ].zone ].name );
-						if ( ! qt.is( max_qty ) ) max_qty = me.o.edata.stati[ items[ i ].zone ][1];
-						else max_qty = Math.min( max_qty, me.o.edata.stati[ items[ i ].zone ][1] );
+						if ( ! qt.is( max_qty ) ) max_qty = me.o.edata.stati[ items[ i ].zone ];
+						else max_qty = Math.min( max_qty, me.o.edata.stati[ items[ i ].zone ] );
 					}
 				}
 				me.e.ps_sel_list.text( znames.join( ', ' ) );
 				me.e.ps_qty.attr( 'max', max_qty + '' );
 				if ( max_qty > 1 ) me.e.ps_qty_ui.show();
-				else {
-					me.e.ps_qty_ui.hide();
-					if ( max_qty <= 0 )
-						_error_msg.call( me, me.msg( 'There are not enough %s tickets available.', znames.join( ', ' ) ) );
-				}
+				else me.e.ps_qty_ui.hide();
 
 				for ( i in common_prices ) if ( common_prices[ has ]( i ) ) ( function( price ) {
 					var prd_id = price.product_id, li = $( me.tmpl( 'psui-price' ) ).appendTo( me.e.ps_list ).on( 'click', function( e ) {
@@ -426,32 +419,17 @@
 						var qty = me.e.ps_qty.val();
 						_reset_ps.call( me );
 						me.show_loading();
-						if ( qt.isF( upon_select_func ) )
-							upon_select_func( prd_id, qty, function() { me.hide_loading(); } );
+						upon_select_func( prd_id, qty, function() { me.hide_loading(); } );
 					} );
 					li.find( '[rel="name"]' ).html( price.product_name );
 					li.find( '[rel="price"]' ).html( price.product_display_price );
 				} )( common_prices[ i ] );
 
-				var pdims = { width:me.e.main_wrap.width(), height:me.e.main_wrap.height() },
-						chart = me.e.main_wrap.find( '#svgui' ),
-						cdims = chart.length ? { width:chart.width(), height:chart.height() } : { width:pdims.width, height:100 };
-
-				this.e.psui.off( 'early-close.psui' ).on( 'early-close.psui', function( e ) {
-					if ( qt.isF( early_close ) ) {
-						early_close( e, items );
-					}
-					var data = { items:items }, i;
-					for ( i = 0; i < data.items.length; i++ ) {
-						data.items[ i ]['state'] = 'i';
-						data.items[ i ]['ticket-type'] = 0;
-					}
-					me.remove( data );
-				} );
+				var pdims = { width:me.e.main_wrap.width(), height:me.e.main_wrap.height() }
 
 				this.e.psui.show();
 				var dims = { width:me.e.ps_box.width(), height:me.e.ps_box.height() };
-				me.e.ps_box.css( { top:( cdims.height - dims.height ) / 2, left:( cdims.width - dims.width ) / 2 } );
+				me.e.ps_box.css( { top:( pdims.height - dims.height ) / 2, left:( pdims.width - dims.width ) / 2 } );
 			},
 
 			show_loading: function() {

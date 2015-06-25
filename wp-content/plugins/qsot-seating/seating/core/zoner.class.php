@@ -27,6 +27,7 @@ class QSOT_zoner {
 		// setup the db tables for the zone reserver
 		self::setup_table_names();
 		add_action( 'switch_blog', array( __CLASS__, 'setup_table_names' ), PHP_INT_MAX, 2 );
+		add_filter( 'qsot-upgrader-table-descriptions', array( __CLASS__, 'setup_tables' ), 10 );
 
 		// state timeouts
 		add_filter( 'qsot-temporary-zone-states', array( __CLASS__, 'temporary_zone_states' ), 10, 1 );
@@ -91,8 +92,6 @@ class QSOT_zoner {
 				foreach ( $res as $row )
 					$cache[ $row->id . '' ] = (int)$row->capacity;
 
-			$cache['0'] = (int)get_post_meta( $event_area_id, self::$o->{'meta_key.capacity'}, true );
-
 			// store the list
 			wp_cache_set( 'ea-zones-' . $event_area_id, $cache, 'qsots', 300 );
 		}
@@ -116,7 +115,7 @@ class QSOT_zoner {
 		$order_id = $extra['order_id'];
 
 		// create a cache if none exists
-		if ( $extra['force'] || ! isset( $avail[ $key ] ) ) {
+		if ( $extra['force'] ||  ! isset( $avail[ $key ] ) ) {
 			// cache any event area lookups
 			if ( ! isset( self::$e2ea[ $event_id . '' ] ) ) self::$e2ea[ $event_id . '' ] = (int)get_post_meta( $event_id, self::$o->{'meta_key.event_area'}, true );
 			$ea_id = self::$e2ea[ $event_id . '' ];
@@ -162,29 +161,14 @@ class QSOT_zoner {
 		// if it is not cached, build the cache
 		if ( ! is_object( $cache ) ) {
 			global $wpdb;
-			if ( $zone_id > 0 ) {
-				// fetch teh basic zone information
-				$cache = $wpdb->get_row( $wpdb->prepare( 'select * from ' . $wpdb->qsot_seating_zones . ' where id = %d', $zone_id ) );
-			} else {
-				$cache = (object)array(
-					'id' => 0,
-					'seating_chart_id' => 0,
-					'name' => 'General Admission',
-					'zone_type' => 1,
-					'abbr' => 'GA',
-					'capacity' => 0,
-				);
-			}
+			// fetch teh basic zone information
+			$cache = $wpdb->get_row( $wpdb->prepare( 'select * from ' . $wpdb->qsot_seating_zones . ' where id = %d', $zone_id ) );
 			// if there is such a zone
 			if ( is_object( $cache ) ) {
 				// load the meta data for the zone and attach it to the object
 				$cache->meta = array();
-				if ( $cache->id > 0 ) {
-					$meta = $wpdb->get_results( $wpdb->prepare( 'select * from ' . $wpdb->qsot_seating_zonemeta . ' where qsot_seating_zones_id = %d order by meta_id asc', $zone_id ) );
-					foreach ( $meta as $k => $v ) $cache->meta[ $k ] = self::_maybe_json_decode( $v );
-				} else {
-					$cache->meta = array();
-				}
+				$meta = $wpdb->get_results( $wpdb->prepare( 'select * from ' . $wpdb->qsot_seating_zonemeta . ' where qsot_seating_zones_id = %d order by meta_id asc', $zone_id ) );
+				foreach ( $meta as $k => $v ) $cache->meta[ $k ] = self::_maybe_json_decode( $v );
 				// store the resulting object in cache
 				wp_cache_set( 'zone-info-' . $zone_id, $cache, 'qsots', 0 );
 			}
@@ -536,7 +520,7 @@ class QSOT_zoner {
 		}
 
 		if ( ! $is_zoned ) {
-			return apply_filters( 'qsot-zoner-reserved', false, $args );
+			return apply_filters( 'qsot-zoner-reserve', false, $args );
 		}
 
 		$zone_id = empty( $zone_id ) ? array() : ( is_array( $zone_id ) ? $zone_id : array( $zone_id ) );
@@ -545,124 +529,70 @@ class QSOT_zoner {
 		if ( $count < 0 ) return false;
 		// if setting the reservation count to 0, then delete reservations if they already exist
 		else if ( $count == 0 ) {
-			// generate the delete statement based on the supplied data
-			$q = $wpdb->prepare( 'delete from ' . $wpdb->qsot_event_zone_to_order . ' where event_id = %s and state = %s', $event->ID, self::$o->{'z.states.i'} );
-
-			// if the customer id was supplied, then add it
-			if ( ! empty( $customer_id ) )
-				$q .= $wpdb->prepare( ' and session_customer_id = %s', $customer_id );
-
-			// if the order id was supplied, add it
-			if ( (int)$order_id > 0 )
-				$q .= $wpdb->prepare( ' and order_id = %d', (int)$order_id );
-
-			// if the chart is zoned, and we have a zone, add it
-			if ( $is_zoned and ! empty( $zone_id ) )
-				$q .= ' and zone_id in( ' . implode( ',', array_map( 'intval', $zone_id ) ) . ')';
-
-			// run the delete and store the status
+			$q = $wpdb->prepare(
+				'delete from ' . $wpdb->qsot_event_zone_to_order . ' where event_id = %s and state = %s and session_customer_id = %s and order_id = %s '
+						. ( $is_zoned && ! empty( $zone_id ) ? ' and zone_id in(' . implode( ',', array_map( 'intval', $zone_id ) ) . ')' : '' ),
+				$event->ID,
+				self::$o->{'z.states.i'},
+				$customer_id,
+				$order_id
+			);
 			$res = $wpdb->query( $q );
-			$success = !!$res;
 		// if count is > 0 then
 		} else {
-			if ( $is_zoned ) {
-				$total_int = apply_filters( 'qsot-zoner-owns', 0, array(
-					'event' => $event,
-					'ticket_type_id' => 0,
-					'state' => self::$o->{'z.states.i'},
-					'customer_id' => $customer_id,
-					'zone_id' => $zone_id
-				) );
+			$total_int = apply_filters( 'qsot-zoner-owns', 0, array(
+				'event' => $event,
+				'ticket_type_id' => 0,
+				'state' => self::$o->{'z.states.i'},
+				'customer_id' => $customer_id,
+				'zone_id' => $zone_id
+			) );
 
-				$err = new WP_Error();
+			$err = new WP_Error();
 
-				foreach ( $zone_id as $zid ) {
-					$available = apply_filters( 'qsot-zoner-get-event-zone-available', 0, (int)$zid, $event->ID );
-					$ztotal_int = isset( $total_int[ $zid . '' ] ) ? array_sum( array_values( $total_int[ $zid . '' ] ) ) : 0;
+			foreach ( $zone_id as $zid ) {
+				$available = apply_filters( 'qsot-zoner-get-event-zone-available', 0, (int)$zid, $event->ID );
+				$ztotal_int = isset( $total_int[ $zid . '' ] ) ? array_sum( array_values( $total_int[ $zid . '' ] ) ) : 0;
 
-					if ( $ztotal_int ) {
-						if ( $count > ( $available - $ztotal_int ) ) {
-							$err->add( 5, sprintf( __( 'There are not %s tickets available to reserve for %s.', 'qsot-seating' ), $count, $event->zones[ $zid . '' ]->name ) );
-							continue;
-						}
-
-						$wpdb->update(
-							$wpdb->qsot_event_zone_to_order,
-							array( 'quantity' => $count ),
-							array(
-								'event_id' => $event->ID,
-								'ticket_type_id' => 0,
-								'session_customer_id' => $customer_id,
-								'order_id' => $order_id,
-								'zone_id' => $zid,
-								'state' => self::$o->{'z.states.i'},
-							)
-						);
-					} else {
-						$wpdb->insert(
-							$wpdb->qsot_event_zone_to_order,
-							array(
-								'event_id' => $event->ID,
-								'ticket_type_id' => 0,
-								'session_customer_id' => $customer_id,
-								'order_id' => $order_id,
-								'zone_id' => $zid,
-								'quantity' => $count,
-								'state' => self::$o->{'z.states.i'},
-							)
-						);
+				if ( $ztotal_int ) {
+					if ( $count > ( $available - $ztotal_int ) ) {
+						$err->add( 5, sprintf( __( 'There are not %s tickets available to reserve for %s.', 'qsot-seating' ), $count, $event->zones[ $zid . '' ]->name ) );
+						continue;
 					}
-				}
 
-				if ( count( $err->get_error_messages() ) >= count( $zone_id ) ) {
-					return $err;
-				}
-
-				$success = true;
-			} else { // COPIED FROM OTCE -- for non-zoned seating
-				$ticket_type_id = 0;
-				// get the available occupancy of the event
-				$available = apply_filters('qsot-get-event-available-tickets', 0, $event);
-				// determine how many this person already has reserved
-				$owns = array_sum( array_values( apply_filters('qsot-zoner-owns', 0, $event, 0, array( self::$o->{'z.states.r'}, self::$o->{'z.states.i'} ), $customer_id) ) );
-				$owns_tt = array_sum( array_values( apply_filters('qsot-zoner-owns', 0, $event, $ticket_type_id, array( self::$o->{'z.states.r'}, self::$o->{'z.states.i'} ), $customer_id) ) );
-
-				// if this user already owns some seats for this event, then 
-				if ($owns_tt) {
-					// if they are requesting more than is available, then just fail
-					if ($count > ($available + $owns_tt - $owns))
-						return new WP_Error(
-							5,
-							$count == 1
-									? sprintf( __( 'There is not %s ticket available to reserve.', 'opentickets-community-edition' ), $count )
-									: sprintf( __( 'There are not %s tickets available to reserve.', 'opentickets-community-edition' ), $count )
-						);
-					// otherwise update the reservation count for this user for this event
-					$res = $wpdb->update(
+					$wpdb->update(
 						$wpdb->qsot_event_zone_to_order,
-						array('quantity' => $count),
-						array('event_id' => $event->ID, 'ticket_type_id' => $ticket_type_id, 'state' => self::$o->{'z.states.i'}, 'session_customer_id' => $customer_id, 'order_id' => $order_id)
+						array( 'quantity' => $count ),
+						array(
+							'event_id' => $event->ID,
+							'ticket_type_id' => 0,
+							'session_customer_id' => $customer_id,
+							'order_id' => $order_id,
+							'zone_id' => $zid,
+							'state' => self::$o->{'z.states.i'},
+						)
 					);
-					$success = $res !== false;
-				// if the user does not already have reservations for this event, then
 				} else {
-					// if the user is requesting more than what is currently available, then just fail
-					if ($count > ($available + $owns_tt - $owns)) return new WP_Error( 5, sprintf( __( 'There are not %s tickets available to reserve.', 'opentickets-community-edition' ), $count ) );
-					// oterhwise, insert the reservations for these seats now
-					$res = $wpdb->insert(
+					$wpdb->insert(
 						$wpdb->qsot_event_zone_to_order,
 						array(
 							'event_id' => $event->ID,
-							'ticket_type_id' => $ticket_type_id,
-							'quantity' => $count,
-							'state' => self::$o->{'z.states.i'},
+							'ticket_type_id' => 0,
 							'session_customer_id' => $customer_id,
 							'order_id' => $order_id,
+							'zone_id' => $zid,
+							'quantity' => $count,
+							'state' => self::$o->{'z.states.i'},
 						)
 					);
-					$success = (bool)$res;
 				}
 			}
+
+			if ( count( $err->get_error_messages() ) >= count( $zone_id ) ) {
+				return $err;
+			}
+
+			$success = true;
 		}
 
 		return $success;
@@ -799,19 +729,19 @@ class QSOT_zoner {
 				) );
 				if ( is_array( $reserved_tt ) ) {
 					if ( isset( $reserved_tt[ $zone_id . '' ] ) )
-						$reserved_tt = is_array( $reserved_tt[ $zone_id . '' ] ) ? array_sum( $reserved_tt[ $zone_id . '' ] ) : $reserved_tt[ $zone_id . '' ];
+						$reserved_tt = is_array( $reserved_tt[ $zone_id . '' ] ) ? array_sum( $reserved_tt[ $zone_id . '' ] ) : 0;
 					else
 						$reserved_tt = 0;
 				}
 
 				// if they already have interests or reservations, then allow them to modify those
 				if ( $interests_tt + $reserved_tt ) {
-					if ( $count > ( $available + $reserved_tt ) )
+					if ( $count > ( $available + $reserved_tt - $res_ints ) )
 						return new WP_Error(
 							5,
 							$count == 1
-									? sprintf( __( 'There is not %s ticket available to reserve. %d, %d, %d, %d', 'qsot-seating' ), $count, $available, $interests_tt, $reserved_tt, $res_ints )
-									: sprintf( __( 'There are not %s tickets available to reserve. %d, %d, %d, %d', 'qsot-seating' ), $count, $available, $interests_tt, $reserved_tt, $res_ints )
+									? sprintf( __( 'There is not %s ticket available to reserve. %d, %d, %d, %d', 'opentickets-community-edition' ), $count, $available, $interests_tt, $reserved_tt, $res_ints )
+									: sprintf( __( 'There are not %s tickets available to reserve. %d, %d, %d, %d', 'opentickets-community-edition' ), $count, $available, $interests_tt, $reserved_tt, $res_ints )
 						);
 
 					$where = array( 'event_id' => $event->ID, 'ticket_type_id' => $ticket_type_id, 'session_customer_id' => $customer_id, 'order_id' => $order_id, 'zone_id' => $zone_id );
@@ -851,10 +781,8 @@ class QSOT_zoner {
 				// get the available occupancy of the event
 				$available = apply_filters('qsot-get-event-available-tickets', 0, $event);
 				// determine how many this person already has reserved
-				$owns = apply_filters('qsot-zoner-owns', 0, $event, 0, self::$o->{'z.states.r'}, $customer_id);
-				if ( is_array( $owns ) ) $owns = array_sum( array_values( $owns ) );
-				$owns_tt = apply_filters( 'qsot-zoner-owns', 0, $event, array( 0, $ticket_type_id ), self::$o->{'z.states.r'}, $customer_id );
-				if ( is_array( $owns_tt ) ) $owns_tt = array_sum( array_values( $owns_tt ) );
+				$owns = array_sum( array_values( apply_filters('qsot-zoner-owns', 0, $event, 0, self::$o->{'z.states.r'}, $customer_id) ) );
+				$owns_tt = array_sum( array_values( apply_filters('qsot-zoner-owns', 0, $event, $ticket_type_id, self::$o->{'z.states.r'}, $customer_id) ) );
 
 				// if this user already owns some seats for this event, then 
 				if ($owns_tt) {
@@ -1159,7 +1087,7 @@ class QSOT_zoner {
 	public static function owns( $current, $event, $ticket_type_id=false, $state=false, $customer_id=false, $order_id=false, $order_item_id=false, $zone_id=0 ) {
 		global $wpdb;
 
-		$cur_order_id = absint( isset( WC()->session ) ? WC()->session->order_awaiting_payment : 0 );
+		$cur_order_id = absint( WC()->session->order_awaiting_payment );
 		// normalize the argument
 		$defs = array(
 			'event' => null,
@@ -1397,7 +1325,7 @@ class QSOT_zoner {
 
 		// event is required information here
 		$event = is_numeric( $event ) && $event > 0 ? apply_filters( 'qsot-get-event', false, $event ) : $event;
-		//if ( ! is_object( $event ) ) return array();
+		if ( ! is_object( $event ) ) return array();
 
 		// build a query to pull the whole list zones this user owns
 		$q = 'select * from ' . $wpdb->qsot_event_zone_to_order . ' where 1=1';
@@ -1631,6 +1559,33 @@ class QSOT_zoner {
 		$wpdb->qsot_seating_zones = $wpdb->prefix . 'qsot_seating_zones';
 		$wpdb->qsot_seating_zonemeta = $wpdb->prefix . 'qsot_seating_zonemeta';
 		$wpdb->qsot_event_zone_to_order = $wpdb->prefix . 'qsot_event_zone_to_order';
+	}
+
+	public static function setup_tables( $tables ) {
+    global $wpdb;
+    $tables[$wpdb->qsot_event_zone_to_order] = array(
+      'version' => '1.1.7',
+      'fields' => array(
+				'event_id' => array( 'type' => 'bigint(20) unsigned' ), // post of type qsot-event
+				'order_id' => array( 'type' => 'bigint(20) unsigned' ), // post of type shop_order (woocommerce)
+				'zone_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // the id of the zone this reservation is for
+				'quantity' => array( 'type' => 'smallint(5) unsigned' ), // some zones can have more than 1 capacity, so we need a quantity to designate how many were purchased ina given zone
+				'state' => array( 'type' => 'varchar(20)' ), // word descriptor for the current state. core states are interest, reserve, confirm, occupied
+				'since' => array( 'type' => 'timestamp', 'default' => 'CONST:|CURRENT_TIMESTAMP|' ), // when the last action took place. used for lockout clearing
+				'session_customer_id' => array( 'type' => 'varchar(150)' ), // woo session id for linking a ticket to a user, before the order is actually created (like interest and reserve statuses)
+				'ticket_type_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // product_id of the woo product that represents the ticket that was purchased/reserved
+				'order_item_id' => array( 'type' => 'bigint(20) unsigned', 'default' => '0' ), // order_item_id of the order item that represents this ticket. present after order creation
+      ),
+      'keys' => array(
+        'KEY evt_id (event_id)',
+        'KEY ord_id (order_id)',
+				'KEY z_id (zone_id)',
+        'KEY oiid (order_item_id)',
+				'KEY stt (state)',
+      )
+    );
+
+    return $tables;
 	}
 }
 

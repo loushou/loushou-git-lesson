@@ -1,14 +1,6 @@
 var QS = QS || {};
 
 ( function( $, S, qt ) {
-	var O = $.extend( { messages:{} }, _qsot_seating_loader );
-
-	function __( name ) {
-		var args = [].slice.call( arguments, 1 ), str = qt.is( O.messages[ name ] ) ? O.messages[ name ] : name, i;
-		for ( i = 0; i < args.length; i++ ) str = str.replace( '%s', args[ i ] );
-		return str;
-	}
-
 	var has = 'hasOwnProperty', features = {}, hasClass, button_bars = {}, bbar_ind = 1,
 			event_names = [ 'click', 'mouseout', 'mouseover', 'dblclick', 'mousemove', 'mousedown', 'mouseup', 'touchstart', 'touchmove', 'touchend', 'touchcancel' ];
 
@@ -300,7 +292,7 @@ var QS = QS || {};
 				ele: t.utils.hud.path( 'M6,0L9,0L9,6L15,6L15,9L9,9L9,15L6,15L6,9L0,9L0,6L6,6z' ),
 				only_click: true,
 				name: 'zoom-in',
-				title: __( 'Zoom-In' ),
+				title: 'Zoom-In',
 				click: function() { t.c.zoom.in(); }
 			} );
 
@@ -308,7 +300,7 @@ var QS = QS || {};
 				ele: t.utils.hud.path( 'M0,0L15,0L15,4L0,4z' ),
 				only_click: true,
 				name: 'zoom-out',
-				title: __( 'Zoom-Out' ),
+				title: 'Zoom-Out',
 				click: function() { t.c.zoom.out(); }
 			} );
 
@@ -320,10 +312,22 @@ var QS = QS || {};
 				ele: g,
 				only_click: true,
 				name: 'reset-zoom',
-				title: __( 'Reset Zoom' ),
+				title: 'Reset Zoom',
 				click: function() { t.c.zoom.calc_view_port().set_pan( 0, 0 ).set_zoom( 1 ); }
 			} );
 
+/* needs to be re-thoguht
+			t.utils.add_btn( {
+				ele: t.utils.hud.path( 'M0,0L6,0L4,2L8,6L11,6L15,2L13,0L19,0L19,6L17,4L13,8L13,11L17,15L19,13L19,19L13,19L15,17L11,13L8,13L4,17L6,19L0,19L0,13L2,15L6,11L6,8L2,4L0,6z' ),
+				only_click: true,
+				name: 'fullscreen',
+				title: 'Distraction Free',
+				click: function() {
+					$( 'body' )[ ( $( 'body' ).hasClass( 'distraction-free' ) ) ? 'removeClass' : 'addClass' ]( 'distraction-free' );
+					$( window ).trigger( 'resize' );
+				}
+			} );
+*/
 		} );
 	} );
 
@@ -422,7 +426,7 @@ var QS = QS || {};
 					hud = t.hud;
 					return t.reinit.apply( t, args );
 				} else {
-					throw __( "No SNAPSVG canvas specified. Buttonbar cannot initialize." );
+					throw "No SNAPSVG canvas specified. Buttonbar cannot initialize.";
 				}
 
 				return t;
@@ -637,7 +641,7 @@ var QS = QS || {};
 					init:function(){},
 					ele: false,
 					name: 'btn-' + ( ++t.bcnt ),
-					title: __( 'Button' ) + ' ' + t.bcnt,
+					title: 'Button ' + t.bcnt,
 					start_active: function() {},
 					end_active: function() {}
 				}, btn );
@@ -689,7 +693,6 @@ var QS = QS || {};
 	QS.svgui = ( function() {
 		var defs = {
 			nonce: '',
-			options: { 'one-click':true },
 			edata: {},
 			ajaxurl: '/wp-admin/admin-ajax.php',
 			templates: {},
@@ -760,6 +763,7 @@ var QS = QS || {};
 					}
 				}
 			}
+
 
 			if ( qt.isO( me.o.owns ) ) {
 				for ( i in me.o.owns ) {
@@ -866,7 +870,7 @@ var QS = QS || {};
 			for ( i = 0; i < zone_ids.length; i++ ) {
 				z = me.o.edata.indexed_zones[ zone_ids[ i ] + '' ];
 				if ( qt.is( z._ele ) ) {
-					if ( qt.isA( me.o.edata.stati[ zone_ids[ i ] + '' ] ) && me.o.edata.stati[ zone_ids[ i ] + '' ][1] <= 0 ) {
+					if ( qt.is( me.o.edata.stati[ zone_ids[ i ] + '' ] ) && me.o.edata.stati[ zone_ids[ i ] + '' ] <= 0 ) {
 						z._ele.addClass( 'unavail' );
 					} else {
 						z._ele.removeClass( 'unavail' );
@@ -880,10 +884,7 @@ var QS = QS || {};
 			this.e = { main:ele };
 			this.o = $.extend( true, {}, defs, o );
 
-			if ( qt.isO( this.o.edata.zones ) && Object.keys( this.o.edata.zones ).length > 0 )
-				this.init();
-			else
-				this.e.main.remove();
+			this.init();
 		}
 
 		ui.prototype = {
@@ -940,7 +941,7 @@ var QS = QS || {};
 					ritem = r.r[ i ];
 					z = me.o.edata.indexed_zones[ ritem.z + '' ];
 					to_update.push( ritem.z );
-					me.o.edata.stati[ ritem.z + '' ][1] = ritem.c;
+					me.o.edata.stati[ ritem.z + '' ] = ritem.c;
 					z._ele.addClass( 'selected ' + ( ritem.c <= 0 ? 'unavail' : '' ) );
 				}
 
@@ -952,7 +953,7 @@ var QS = QS || {};
 				if ( ! r || ! qt.isA( r.r ) || ! r.r.length )
 					return;
 
-				var data = { items:[] }, prices = qt.isO( this.o.edata.ps ) ? this.o.edata.ps : { '0':[] }, auto_reserve = me.o.options['one-click'], i;
+				var data = { items:[] }, prices = qt.isO( this.o.edata.ps ) ? this.o.edata.ps : { '0':[] }, auto_reserve = true, i;
 				for ( i = 0; i < r.r.length; i++ ) {
 					var ritem = r.r[ i ];
 					if ( ! ritem.s ) {
@@ -969,7 +970,7 @@ var QS = QS || {};
 					}
 
 					to_update.push( ritem.z );
-					me.o.edata.stati[ ritem.z + '' ][1] = ritem.c - ritem.q;
+					me.o.edata.stati[ ritem.z + '' ] = ritem.c - ritem.q;
 					z._ele.addClass( 'selected ' + ( ritem.c - ritem.q <= 0 ? 'unavail' : '' ) );
 				}
 
@@ -1002,7 +1003,7 @@ var QS = QS || {};
 							z._ele.removeClass( 'unavail' );
 					}
 					to_update.push( r.r[ i ].z );
-					me.o.edata.stati[ r.r[ i ].z + '' ][1] = r.r[ i ].c;
+					me.o.edata.stati[ r.r[ i ].z + '' ] = r.r[ i ].c;
 				}
 
 				_update_from_stati.call( me, to_update );
@@ -1042,7 +1043,7 @@ var QS = QS || {};
 					if ( ! qt.is( me.tooltip ) ) _create_tooltip.call( me );
 					if ( ! qt.isO( me.tooltip ) || 0 == me.tooltip.length ) return;
 
-					var avail = qt.isA( me.o.edata.stati[ zone.id ] ) ? me.o.edata.stati[ zone.id ][1] : 0,
+					var avail = me.o.edata.stati[ zone.id ],
 							status_msg = me.msg( avail > 0 ? ( avail > 1 ? 'Available (%s)' : 'Available' ) : 'Unavailable', avail ),
 							pos = { top:e.pageY + off.y, left:e.pageX + off.x };
 
@@ -1109,7 +1110,7 @@ var QS = QS || {};
 					// nothing
 				} else {
 					ele.addClass( 'zone' );
-					if ( ! qt.isA( this.o.edata.stati[ zone['id'] ] ) || this.o.edata.stati[ zone['id'] ][1] <= 0 ) {
+					if ( ! qt.is( this.o.edata.stati[ zone['id'] ] ) || this.o.edata.stati[ zone['id'] ] <= 0 ) {
 						ele.addClass( 'unavail' );
 					}
 				}
