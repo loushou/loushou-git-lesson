@@ -1,0 +1,70 @@
+.qsot-tooltip { display:none; }
+.qsot-tooltip .tooltip-positioner { position:absolute; top:0; lefT:0; width:1px; height:1px; z-index:1000000; pointer-events:none; }
+.qsot-tooltip .tooltip-wrap { border:2px solid #555; padding:0.7em; box-shadow:0 0 5px #000; background-color:#efefef; border-radius:2px; width:15em; font-size:13px; line-height:1.2em;
+		-webkit-box-sizing:border-box; -moz-box-sizing:border-box; -ms-box-sizing:border-box; box-sizing:border-box; }
+.qsot-tooltip .qslabel { font-weight:700; color:#555; }
+.qsot-tooltip .value { font-style:italic; color:#707070; }
+
+.event-area-ticket-selection-form { position:relative; background-color:#efefef; overflow:hidden; border:1px solid #000;
+		-webkit-box-sizing:border-box; -moz-box-sizing:border-box; -ms-box-sizing:border-box; box-sizing:border-box;
+		-webkit-touch-callout:none; -webkit-user-select:none; -khtml-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; }
+.event-area-ticket-selection-form svg { display:block; }
+.distraction-free .event-area-ticket-selection-form { width:auto !important; height:auto !important; position:fixed; top:0; bottom:0; left:0; right:0; margin:auto; z-index:100000; }
+#qsot-utils { position:absolute; z-index:100; box-shadow:0 0 5px #000; }
+#svgui { height:100%; width:auto; }
+
+.qsot-event-area-ticket-selection { position:relative; }
+.qsot-event-area-ticket-selection .ticket-selection-section .form-inner { padding:0.7em; }
+.qsot-event-area-ticket-selection .ticket-selection-section .actions { display:none; }
+.qsot-event-area-ticket-selection .owns-wrap { padding-top:0.5em; }
+.qsot-event-area-ticket-selection .field:first-child { padding-top:0; }
+.qsot-event-area-ticket-selection .field .update-btn { display:none; }
+.qsot-event-area-ticket-selection .qsots-loading { display:none; position:absolute; top:0; bottom:0; left:0; right:0; background:#000; background:rgba( 0, 0, 0, 0.7 ); z-index:2005; }
+.qsot-event-area-ticket-selection .qsots-loading .inner { display:table; width:100%; height:100%; }
+.qsot-event-area-ticket-selection .qsots-loading .inner-inner { display:table-cell; vertical-align:middle; text-align:center; }
+.qsot-event-area-ticket-selection .qsots-loading .msg { padding:0 10%; text-align:center; font-size:1.5em; color:#fff; }
+body .qsot-event-area-ticket-selection h4 { margin:0; padding:0; line-height:1; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs { display:none; padding-top:15px; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs .error { display:none; border:1px solid #800; color:#800; background:#ffeeee; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs .confirm { display:none; border:1px solid #008; color:#008; background:#eeeeff; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs .inner { padding:0.5em; font-size:0.8em; line-height:1.2em; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs .msg { padding-top:0.5em; }
+.qsot-event-area-ticket-selection .ticket-ui-msgs .msg:first-child { padding-top:0; }
+.qsot-event-area-ticket-selection .item .remove-link { font-weight:700; cursor:pointer; border-radius:100%; font-size:0.7em; padding:0.3em 0.4em; height:auto; width:auto; text-decoration:none; }
+.qsot-event-area-ticket-selection .item .remove-link:hover,
+.qsot-event-area-ticket-selection .item .remove-link:active { border:1px solid #f00; background-color:#f00; text-decoration:none; }
+
+.price-selection-ui { display:none; }
+.price-selection-ui .price-selection-error { display:none; }
+.price-selection-ui .price-selection-backdrop { position:absolute; top:0; bottom:0; left:0; right:0; background:rgba( 0, 0, 0, 0.7); z-index:2000; }
+.price-selection-ui .price-selection-box { position:absolute; border:2px solid #555; background:#efefef; box-shadow:0 0 13px #000; z-index:2001;
+		-webkit-box-sizing:border-box; -moz-box-sizing:border-box; -ms-box-sizing:border-box; box-sizing:border-box; }
+.price-selection-ui .price-selection-box .title-bar { background-color:#555; color:#fff; }
+.price-selection-ui .price-selection-box .title-bar h4 { margin:0; padding:4px 1.5em 8px 8px; line-height:1; color:inherit; }
+.price-selection-ui .price-selection-box .price-ui-content { padding:0.5em; }
+.price-selection-ui .close { position:absolute; top:3px; right:3px; color:#800; font-weight:700; cursor:pointer; border-radius:100%; background-color:#fff; font-size:0.7em; padding:0.3em 0.4em; border:1px solid #800;
+		text-decoration:none; }
+.price-selection-ui .close:active,
+.price-selection-ui .close:hover { color:#f00; border-color:#f00; text-decoration:none; }
+.price-selection-ui .quantity-ui { display:none; }
+.price-selection-ui .field { padding-top:0.5em; }
+.price-selection-ui .field:first-child { padding-top:0; }
+.price-selection-ui .field .label { font-weight:700; font-style:italic; color:#333; }
+.price-selection-ui .field input[type="text"],
+.price-selection-ui .field input[type="number"] { width:100%; border:1px solid #777; box-sizing:border-box; padding:0.1em 0.5em; }
+.price-selection-ui .available-prices ul { border:1px solid #777; background-color:#fff; margin:0; padding:0; }
+.price-selection-ui .available-prices ul:empty { display:none; }
+.price-selection-ui .available-prices ul li { padding:0 0.5em; border-top:1px solid #777; cursor:pointer; }
+.price-selection-ui .available-prices ul li:first-child { border-top:0 none; }
+
+
+/* seating ui buttons */
+.ui-btn .shell { fill:#ccc; stroke:#777; stroke-width:1px; }
+.ui-btn .icon,
+.ui-btn .icon * { fill:#aaa; stroke:#777; stroke-width:1px; }
+.ui-btn.active .shell,
+.ui-btn:hover .shell { fill:#eee; stroke:#555; }
+.ui-btn.active .icon *,
+.ui-btn.active .icon,
+.ui-btn:hover .icon *,
+.ui-btn:hover .icon { fill:#aaa; stroke:#555; }
